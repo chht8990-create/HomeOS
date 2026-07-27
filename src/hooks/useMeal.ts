@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { recipes } from '../data/recipes'
+import { findRecipeByMealName } from '../services/recipeEngine'
 import type { MealType, StoredMeal } from '../types/meal'
 
 export type MealEditorStatus =
@@ -11,17 +11,6 @@ export type MealEditorStatus =
 type UseMealOptions = {
   date: string
   mealType: MealType
-}
-
-function getRecipeByMealName(mealName: string) {
-  const normalizedMealName = mealName
-    .trim()
-    .replace(/\s+/g, '')
-
-  return recipes.find(
-    (recipe) =>
-      recipe.name.replace(/\s+/g, '') === normalizedMealName,
-  )
 }
 
 function createMealId(date: string, mealType: MealType) {
@@ -129,7 +118,7 @@ function useMeal({ date, mealType }: UseMealOptions) {
     )
 
     const recipe =
-      getRecipeByMealName(trimmedMealName)
+      findRecipeByMealName(trimmedMealName)
 
     if (recipe) {
       window.dispatchEvent(

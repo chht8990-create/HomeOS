@@ -1,6 +1,7 @@
 import MealBlock from '../blocks/MealBlock'
 import ShoppingSummaryBlock from '../blocks/ShoppingSummaryBlock'
 import InventorySummaryBlock from '../blocks/InventorySummaryBlock'
+import TodayPlannerSummaryBlock from '../blocks/TodayPlannerSummaryBlock'
 import ScreenHeader from '../components/ui/ScreenHeader'
 import type { PageName } from '../components/BottomNavigation'
 
@@ -54,6 +55,11 @@ function TodayPage({ onChangePage }: TodayPageProps) {
           mealType="snack"
           title="간식"
           icon="🍓"
+        />
+
+        <TodayPlannerSummaryBlock
+          date={todayDate}
+          onOpenPlanner={() => onChangePage('mealPlan')}
         />
 
         <ShoppingSummaryBlock

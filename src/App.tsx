@@ -18,11 +18,13 @@ type PageName =
 
 type RecipeMatchedEventDetail = {
   sourceId: string
+  previousSourceId?: string
   ingredients: Ingredient[]
 }
 
 type MealClearedEventDetail = {
   sourceId: string
+  previousSourceId?: string
 }
 
 function App() {
@@ -42,6 +44,7 @@ function App() {
       addMealItems(
         customEvent.detail.sourceId,
         customEvent.detail.ingredients,
+        customEvent.detail.previousSourceId,
       )
     }
 
@@ -51,6 +54,7 @@ function App() {
 
       removeMealItems(
         customEvent.detail.sourceId,
+        customEvent.detail.previousSourceId,
       )
     }
 

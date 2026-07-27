@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
-import { createMealShoppingItems } from '../services/ingredientEngine'
 import { mergeIngredients } from '../services/ingredientMergeEngine'
 import { calculateMissingIngredients } from '../services/inventoryEngine'
+import {
+  createManualShoppingItem,
+  createMealShoppingItems,
+} from '../services/shoppingEngine'
 import type { Ingredient } from '../types/ingredient'
 import type { ShoppingItem } from '../types/shopping'
 import { readInventoryItems } from './useInventory'
@@ -33,14 +36,6 @@ function readItems(): ShoppingItem[] {
   }
 }
 
-function createItemId() {
-  if (typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
-  }
-
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`
-}
-
 function useShoppingList() {
   const [items, setItems] = useState<ShoppingItem[]>(readItems)
 
@@ -65,21 +60,10 @@ function useShoppingList() {
   }
 
   function addItem(name: string) {
-    const trimmedName = name.trim()
+    const newItem = createManualShoppingItem(name)
 
-    if (!trimmedName) {
+    if (!newItem) {
       return false
-    }
-
-    const now = new Date().toISOString()
-
-    const newItem: ShoppingItem = {
-      id: createItemId(),
-      name: trimmedName,
-      completed: false,
-      source: 'manual',
-      createdAt: now,
-      updatedAt: now,
     }
 
     saveItems([...items, newItem])
@@ -89,9 +73,14 @@ function useShoppingList() {
   function addMealItems(
     sourceId: string,
     ingredients: Ingredient[],
+    previousSourceId?: string,
   ) {
-    const itemsWithoutOldSource = items.filter(
-      (item) => item.sourceId !== sourceId,
+    const currentItems = readItems()
+    const itemsWithoutOldSource = currentItems.filter(
+      (item) =>
+        item.sourceId !== sourceId &&
+        (!previousSourceId ||
+          item.sourceId !== previousSourceId),
     )
 
     const mergedIngredients =
@@ -114,8 +103,20 @@ function useShoppingList() {
     ])
   }
 
-  function removeMealItems(sourceId: string) {
-    saveItems(items.filter((item) => item.sourceId !== sourceId))
+  function removeMealItems(
+    sourceId: string,
+    previousSourceId?: string,
+  ) {
+    const currentItems = readItems()
+
+    saveItems(
+      currentItems.filter(
+        (item) =>
+          item.sourceId !== sourceId &&
+          (!previousSourceId ||
+            item.sourceId !== previousSourceId),
+      ),
+    )
   }
 
   function toggleItem(itemId: string) {
