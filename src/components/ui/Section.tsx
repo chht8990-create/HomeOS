@@ -5,6 +5,7 @@ type SectionProps = {
   description?: string
   children: ReactNode
   action?: ReactNode
+  className?: string
 }
 
 function Section({
@@ -12,9 +13,14 @@ function Section({
   description,
   children,
   action,
+  className = '',
 }: SectionProps) {
+  const classes = ['ui-section', className]
+    .filter(Boolean)
+    .join(' ')
+
   return (
-    <section className="ui-section">
+    <section className={classes}>
       <div className="ui-section-header">
         <div>
           <h2 className="ui-section-title">{title}</h2>

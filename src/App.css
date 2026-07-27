@@ -1,27 +1,33 @@
-#root {
-  min-height: 100vh;
-}
-
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
 button {
   font: inherit;
+  touch-action: manipulation;
 }
 
 .app {
   width: 100%;
   max-width: 480px;
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0 auto;
-  padding: var(--space-lg) var(--text-lg) 104px;
+  padding:
+    var(--space-lg)
+    max(var(--space-md), env(safe-area-inset-right))
+    calc(112px + env(safe-area-inset-bottom))
+    max(var(--space-md), env(safe-area-inset-left));
   background: var(--color-background);
   color: var(--color-text);
+  overflow-x: clip;
 }
 
 .app-content {
   width: 100%;
+  min-width: 0;
 }
 
 .bottom-navigation {
@@ -35,8 +41,10 @@ button {
   width: 100%;
   max-width: 480px;
   margin: 0 auto;
-  padding: 10px var(--space-sm)
-    max(10px, env(safe-area-inset-bottom));
+  padding:
+    8px max(var(--space-sm), env(safe-area-inset-right))
+    max(8px, env(safe-area-inset-bottom))
+    max(var(--space-sm), env(safe-area-inset-left));
   border-top: 1px solid var(--color-border);
   background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(14px);
@@ -48,7 +56,8 @@ button {
   flex-direction: column;
   align-items: center;
   gap: 5px;
-  padding: 7px 2px;
+  min-height: 56px;
+  padding: 6px 2px;
   border: 0;
   background: transparent;
   color: var(--color-text-light);
@@ -63,6 +72,19 @@ button {
 .nav-item.active {
   color: var(--color-primary);
   font-weight: 800;
+}
+
+@media (max-width: 380px) {
+  .app {
+    padding-top: var(--space-md);
+    padding-right: max(14px, env(safe-area-inset-right));
+    padding-left: max(14px, env(safe-area-inset-left));
+  }
+
+  .nav-item,
+  .nav-item span {
+    font-size: 11px;
+  }
 }
 
 @media (min-width: 700px) {

@@ -102,6 +102,7 @@ function ShoppingPage() {
 
       <main className="app-content">
         <Section
+          className="shopping-progress-section"
           title="구매 진행률"
           description={`${completedItems.length} / ${items.length} 구매 완료`}
         >
@@ -109,6 +110,7 @@ function ShoppingPage() {
             <div className="shopping-progress">
               <strong className="shopping-progress__count">
                 {completedItems.length} / {items.length}
+                <span>구매 완료</span>
               </strong>
               <progress
                 className="shopping-progress__bar"
@@ -200,6 +202,7 @@ function ShoppingPage() {
         </Section>
 
         <Section
+          className="shopping-basket-section"
           title="장바구니"
           description={`${completedItems.length}개 담았어요`}
           action={
@@ -212,7 +215,7 @@ function ShoppingPage() {
             </Button>
           }
         >
-          <Card>
+          <Card className="shopping-basket-card">
             {completedItems.length === 0 ? (
               <EmptyState
                 icon="🧺"
