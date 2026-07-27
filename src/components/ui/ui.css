@@ -347,6 +347,12 @@
   color: var(--color-text);
   font: inherit;
   outline: none;
+  scroll-margin-top: calc(
+    104px + env(safe-area-inset-top, 0px)
+  );
+  scroll-margin-bottom: calc(
+    112px + env(safe-area-inset-bottom, 0px)
+  );
 }
 
 .shopping-add__input:focus {
@@ -361,7 +367,10 @@
 
 .shopping-progress-section {
   position: sticky;
-  top: 0;
+  top: max(
+    var(--space-sm),
+    env(safe-area-inset-top, 0px)
+  );
   z-index: 5;
   padding: var(--space-xs) 0 var(--space-sm);
   background: linear-gradient(
@@ -377,7 +386,11 @@
 
 .shopping-progress-section .ui-card {
   padding: 12px var(--space-md);
+  border-color: rgba(79, 143, 99, 0.24);
   border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 8px 22px rgba(53, 47, 38, 0.12);
+  backdrop-filter: blur(12px);
 }
 
 .shopping-progress__count {
@@ -588,6 +601,25 @@
 .shopping-basket-card {
   border-color: rgba(79, 143, 99, 0.3);
   box-shadow: none;
+}
+
+.shopping-quick-add {
+  position: fixed;
+  right: max(
+    var(--space-md),
+    env(safe-area-inset-right, 0px),
+    calc((100vw - 480px) / 2 + var(--space-md))
+  );
+  bottom: calc(
+    88px + env(safe-area-inset-bottom, 0px)
+  );
+  z-index: 9;
+  min-height: 48px;
+  padding-inline: 18px;
+  border-color: rgba(255, 255, 255, 0.72);
+  border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(40, 91, 57, 0.24);
+  white-space: nowrap;
 }
 
 @keyframes shopping-item-confirm {
@@ -831,5 +863,12 @@
 
   .shopping-basket-section {
     padding: var(--space-sm);
+  }
+
+  .shopping-quick-add {
+    right: max(
+      14px,
+      env(safe-area-inset-right, 0px)
+    );
   }
 }

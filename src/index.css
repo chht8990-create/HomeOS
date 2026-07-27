@@ -27,7 +27,6 @@ body {
   min-height: 100dvh;
   margin: 0;
   background: var(--color-background);
-  overflow-x: hidden;
 }
 
 #root {

@@ -22,7 +22,6 @@ button {
     max(var(--space-md), env(safe-area-inset-left));
   background: var(--color-background);
   color: var(--color-text);
-  overflow-x: clip;
 }
 
 .app-content {

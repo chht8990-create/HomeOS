@@ -95,10 +95,16 @@ function ShoppingPage() {
     transitioningItemKeys,
     setTransitioningItemKeys,
   ] = useState<Set<string>>(() => new Set())
+  const [
+    isQuickAddVisible,
+    setIsQuickAddVisible,
+  ] = useState(false)
   const transitioningItemKeysRef = useRef(
     new Set<string>(),
   )
   const isMountedRef = useRef(true)
+  const addItemInputRef =
+    useRef<HTMLInputElement>(null)
 
   const {
     items,
@@ -138,6 +144,57 @@ function ShoppingPage() {
 
     return () => {
       isMountedRef.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    const input = addItemInputRef.current
+    const basket = document.querySelector<HTMLElement>(
+      '.shopping-basket-section',
+    )
+
+    if (!input || !basket) {
+      return
+    }
+
+    if (!('IntersectionObserver' in window)) {
+      return
+    }
+
+    let isInputVisible = true
+    let isBasketVisible = false
+
+    const updateQuickAddVisibility = () => {
+      setIsQuickAddVisible(
+        !isInputVisible && !isBasketVisible,
+      )
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.target === input) {
+            isInputVisible = entry.isIntersecting
+          }
+
+          if (entry.target === basket) {
+            isBasketVisible = entry.isIntersecting
+          }
+        })
+
+        updateQuickAddVisibility()
+      },
+      {
+        rootMargin: '0px 0px -88px 0px',
+        threshold: 0.1,
+      },
+    )
+
+    observer.observe(input)
+    observer.observe(basket)
+
+    return () => {
+      observer.disconnect()
     }
   }, [])
 
@@ -194,6 +251,26 @@ function ShoppingPage() {
     deleteItems(item.itemIds)
   }
 
+  function handleQuickAdd() {
+    const input = addItemInputRef.current
+
+    if (!input) {
+      return
+    }
+
+    const prefersReducedMotion = window.matchMedia(
+      '(prefers-reduced-motion: reduce)',
+    ).matches
+
+    input.scrollIntoView({
+      behavior: prefersReducedMotion
+        ? 'auto'
+        : 'smooth',
+      block: 'center',
+    })
+    input.focus({ preventScroll: true })
+  }
+
   return (
     <>
       <ScreenHeader
@@ -231,6 +308,7 @@ function ShoppingPage() {
           <Card>
             <div className="shopping-add">
               <input
+                ref={addItemInputRef}
                 className="shopping-add__input"
                 type="text"
                 value={itemName}
@@ -357,6 +435,16 @@ function ShoppingPage() {
           </Card>
         </Section>
       </main>
+
+      {isQuickAddVisible ? (
+        <Button
+          className="shopping-quick-add"
+          aria-label="항목 추가 입력창으로 이동"
+          onClick={handleQuickAdd}
+        >
+          + 항목 추가
+        </Button>
+      ) : null}
     </>
   )
 }
