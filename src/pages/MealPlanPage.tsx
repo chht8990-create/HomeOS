@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import RecipeRecommendationBlock from '../blocks/RecipeRecommendationBlock'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
@@ -187,6 +188,10 @@ function MealPlanPage() {
             </form>
           </Card>
         </Section>
+
+        <RecipeRecommendationBlock
+          onSelectRecipe={setMealName}
+        />
 
         <Section
           title="저장된 식단"
