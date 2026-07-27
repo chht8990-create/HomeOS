@@ -5,12 +5,26 @@ import {
   createManualShoppingItem,
   createMealShoppingItems,
 } from '../services/shoppingEngine'
+import {
+  mergeCompletedShoppingIntoInventory,
+} from '../services/shoppingInventoryEngine'
 import type { Ingredient } from '../types/ingredient'
 import type { ShoppingItem } from '../types/shopping'
-import { readInventoryItems } from './useInventory'
+import {
+  readInventoryItems,
+  writeInventoryItems,
+} from './useInventory'
 
 const STORAGE_KEY = 'homeos.shopping.items'
 const CHANGE_EVENT = 'homeos:shopping-changed'
+
+function createInventoryId() {
+  if (typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+
+  return `${Date.now()}-${Math.random()}`
+}
 
 function readItems(): ShoppingItem[] {
   const storedValue = window.localStorage.getItem(STORAGE_KEY)
@@ -157,6 +171,37 @@ function useShoppingList() {
     )
   }
 
+  function applyCompletedItemsToInventory() {
+    const currentItems = readItems()
+    const result =
+      mergeCompletedShoppingIntoInventory(
+        readInventoryItems(),
+        currentItems,
+        {
+          createId: createInventoryId,
+          now: new Date().toISOString(),
+        },
+      )
+
+    if (result.appliedShoppingItemIds.length === 0) {
+      return 0
+    }
+
+    writeInventoryItems(result.inventoryItems)
+
+    const appliedItemIdSet = new Set(
+      result.appliedShoppingItemIds,
+    )
+
+    saveItems(
+      currentItems.filter(
+        (item) => !appliedItemIdSet.has(item.id),
+      ),
+    )
+
+    return result.appliedItemCount
+  }
+
   return {
     items,
     remainingItems: items.filter((item) => !item.completed),
@@ -167,6 +212,7 @@ function useShoppingList() {
     setItemsCompleted,
     deleteItems,
     clearCompletedItems,
+    applyCompletedItemsToInventory,
   }
 }
 

@@ -7,7 +7,9 @@ import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
 import ScreenHeader from '../components/ui/ScreenHeader'
 import Section from '../components/ui/Section'
+import useHomeOsBackup from '../hooks/useHomeOsBackup'
 import useMealPackImport from '../hooks/useMealPackImport'
+import type { HomeOsBackup } from '../services/homeOsBackupEngine'
 import type { MealType } from '../types/meal'
 import type { MealPackPreview } from '../services/mealPackEngine'
 
@@ -20,6 +22,11 @@ const mealTypeLabels: Record<MealType, string> = {
 
 function SettingsPage() {
   const { prepare, apply } = useMealPackImport()
+  const {
+    exportBackup,
+    prepareImport: prepareBackupImport,
+    applyImport: applyBackupImport,
+  } = useHomeOsBackup()
   const [fileInputKey, setFileInputKey] =
     useState(0)
   const [selectedFileName, setSelectedFileName] =
@@ -28,6 +35,17 @@ function SettingsPage() {
     useState<MealPackPreview | null>(null)
   const [errors, setErrors] = useState<string[]>([])
   const [successMessage, setSuccessMessage] =
+    useState('')
+  const [backupFileInputKey, setBackupFileInputKey] =
+    useState(0)
+  const [backupFileName, setBackupFileName] =
+    useState('')
+  const [backupPreview, setBackupPreview] =
+    useState<HomeOsBackup | null>(null)
+  const [backupErrors, setBackupErrors] = useState<
+    string[]
+  >([])
+  const [backupStatus, setBackupStatus] =
     useState('')
 
   function resetSelection() {
@@ -101,6 +119,73 @@ function SettingsPage() {
       (preview.recipesToImport.length > 0 ||
         preview.plannedMealsToImport.length > 0),
   )
+
+  function resetBackupSelection() {
+    setBackupFileInputKey(
+      (currentKey) => currentKey + 1,
+    )
+    setBackupFileName('')
+    setBackupPreview(null)
+    setBackupErrors([])
+  }
+
+  function handleBackupExport() {
+    const backup = exportBackup()
+
+    setBackupStatus(
+      `HomeOS 전체 백업을 저장했습니다. (${backup.exportedAt})`,
+    )
+  }
+
+  async function handleBackupFileChange(
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = event.target.files?.[0]
+
+    setBackupPreview(null)
+    setBackupErrors([])
+    setBackupStatus('')
+
+    if (!file) {
+      setBackupFileName('')
+      return
+    }
+
+    setBackupFileName(file.name)
+
+    try {
+      const result = prepareBackupImport(
+        await file.text(),
+      )
+
+      if (!result.success) {
+        setBackupErrors(result.errors)
+        return
+      }
+
+      setBackupPreview(result.backup)
+    } catch {
+      setBackupErrors([
+        '백업 파일을 읽을 수 없습니다.',
+      ])
+    }
+  }
+
+  function handleBackupApply() {
+    if (!backupPreview) {
+      return
+    }
+
+    const shouldApply = window.confirm(
+      '이 백업으로 HomeOS 전체 데이터를 복원할까요? 현재 데이터는 먼저 자동 백업됩니다.',
+    )
+
+    if (!shouldApply) {
+      return
+    }
+
+    applyBackupImport(backupPreview)
+  }
 
   return (
     <>
@@ -308,6 +393,125 @@ function SettingsPage() {
                 </div>
               </>
             )}
+          </Card>
+        </Section>
+
+        <Section
+          title="HomeOS 전체 백업/복원"
+          description="Inventory, Shopping, Planner, Recipe 등 HomeOS 데이터를 한 파일로 보관하고 복원합니다."
+        >
+          <Card>
+            <div className="inventory-form">
+              <Button
+                fullWidth
+                onClick={handleBackupExport}
+              >
+                전체 데이터 내보내기
+              </Button>
+
+              <p className="meal-editor__help">
+                복원할 때는 현재 데이터를 먼저 자동
+                백업한 뒤 선택한 파일을 적용합니다.
+              </p>
+
+              <label className="inventory-form__field">
+                HomeOS 백업 JSON
+                <input
+                  key={backupFileInputKey}
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={handleBackupFileChange}
+                />
+              </label>
+
+              {backupFileName ? (
+                <p className="meal-editor__help">
+                  선택한 파일: {backupFileName}
+                </p>
+              ) : null}
+            </div>
+
+            {backupErrors.length > 0 ? (
+              <div role="alert">
+                <h3>복원할 수 없는 파일이에요.</h3>
+                <ul>
+                  {backupErrors.map((error) => (
+                    <li key={error}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {backupStatus ? (
+              <p role="status">{backupStatus}</p>
+            ) : null}
+
+            {backupPreview ? (
+              <Section
+                title="백업 미리보기"
+                description={`내보낸 시각: ${backupPreview.exportedAt}`}
+              >
+                <ul className="inventory-list">
+                  <li className="inventory-item">
+                    <strong>Inventory</strong>
+                    <span>
+                      {
+                        backupPreview.data.inventory
+                          .length
+                      }
+                      개
+                    </span>
+                  </li>
+                  <li className="inventory-item">
+                    <strong>Shopping</strong>
+                    <span>
+                      {
+                        backupPreview.data.shopping
+                          .length
+                      }
+                      개
+                    </span>
+                  </li>
+                  <li className="inventory-item">
+                    <strong>Planner</strong>
+                    <span>
+                      {
+                        backupPreview.data.planner
+                          .length
+                      }
+                      개
+                    </span>
+                  </li>
+                  <li className="inventory-item">
+                    <strong>Imported Recipe</strong>
+                    <span>
+                      {
+                        backupPreview.data.recipes
+                          .length
+                      }
+                      개
+                    </span>
+                  </li>
+                </ul>
+
+                <div className="meal-editor__actions">
+                  <Button
+                    variant="secondary"
+                    fullWidth
+                    onClick={resetBackupSelection}
+                  >
+                    취소
+                  </Button>
+
+                  <Button
+                    fullWidth
+                    onClick={handleBackupApply}
+                  >
+                    전체 백업 복원
+                  </Button>
+                </div>
+              </Section>
+            ) : null}
           </Card>
         </Section>
       </main>

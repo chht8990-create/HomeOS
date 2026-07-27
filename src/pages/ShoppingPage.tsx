@@ -99,9 +99,18 @@ function ShoppingPage() {
     isQuickAddVisible,
     setIsQuickAddVisible,
   ] = useState(false)
+  const [
+    isApplyingInventory,
+    setIsApplyingInventory,
+  ] = useState(false)
+  const [
+    inventoryApplyMessage,
+    setInventoryApplyMessage,
+  ] = useState('')
   const transitioningItemKeysRef = useRef(
     new Set<string>(),
   )
+  const isApplyingInventoryRef = useRef(false)
   const isMountedRef = useRef(true)
   const addItemInputRef =
     useRef<HTMLInputElement>(null)
@@ -114,6 +123,7 @@ function ShoppingPage() {
     setItemsCompleted,
     deleteItems,
     clearCompletedItems,
+    applyCompletedItemsToInventory,
   } = useShoppingList()
   const remainingCategoryGroups =
     groupShoppingItemsByCategory(remainingItems)
@@ -271,6 +281,30 @@ function ShoppingPage() {
     input.focus({ preventScroll: true })
   }
 
+  function handleApplyBasketToInventory() {
+    if (isApplyingInventoryRef.current) {
+      return
+    }
+
+    isApplyingInventoryRef.current = true
+    setIsApplyingInventory(true)
+    setInventoryApplyMessage('')
+
+    try {
+      const appliedItemCount =
+        applyCompletedItemsToInventory()
+
+      if (appliedItemCount > 0) {
+        setInventoryApplyMessage(
+          `재고 ${appliedItemCount}개 품목 반영 완료`,
+        )
+      }
+    } finally {
+      isApplyingInventoryRef.current = false
+      setIsApplyingInventory(false)
+    }
+  }
+
   return (
     <>
       <ScreenHeader
@@ -407,6 +441,25 @@ function ShoppingPage() {
           }
         >
           <Card className="shopping-basket-card">
+            <div className="shopping-basket-actions">
+              <Button
+                fullWidth
+                disabled={
+                  completedItems.length === 0 ||
+                  isApplyingInventory
+                }
+                onClick={handleApplyBasketToInventory}
+              >
+                장바구니를 재고에 반영
+              </Button>
+
+              {inventoryApplyMessage ? (
+                <p role="status">
+                  {inventoryApplyMessage}
+                </p>
+              ) : null}
+            </div>
+
             {completedDisplayItems.length === 0 ? (
               <EmptyState
                 icon="🧺"

@@ -5,7 +5,10 @@ import EmptyState from '../components/ui/EmptyState'
 import ScreenHeader from '../components/ui/ScreenHeader'
 import Section from '../components/ui/Section'
 import useInventory from '../hooks/useInventory'
-import type { InventoryLocation } from '../types/inventory'
+import type {
+  InventoryItem,
+  InventoryLocation,
+} from '../types/inventory'
 
 const locationLabels: Record<InventoryLocation, string> = {
   fridge: '냉장',
@@ -19,22 +22,69 @@ function InventoryPage() {
   const [unit, setUnit] = useState('개')
   const [location, setLocation] =
     useState<InventoryLocation>('fridge')
+  const [editingId, setEditingId] =
+    useState<string | null>(null)
 
-  const { items, addItem, deleteItem } = useInventory()
+  const {
+    items,
+    addItem,
+    updateItem,
+    deleteItem,
+  } = useInventory()
 
-  function handleAddItem() {
-    const parsedQuantity = Number(quantity)
-
-    if (!name.trim() || !Number.isFinite(parsedQuantity) || parsedQuantity <= 0) {
-      return
-    }
-
-    addItem(name, parsedQuantity, unit.trim() || '개', location)
-
+  function resetEditor() {
     setName('')
     setQuantity('1')
     setUnit('개')
     setLocation('fridge')
+    setEditingId(null)
+  }
+
+  function handleSaveItem() {
+    const parsedQuantity = Number(quantity)
+
+    if (
+      !name.trim() ||
+      !Number.isFinite(parsedQuantity) ||
+      parsedQuantity <= 0
+    ) {
+      return
+    }
+
+    if (editingId) {
+      updateItem(
+        editingId,
+        name,
+        parsedQuantity,
+        unit,
+        location,
+      )
+    } else {
+      addItem(
+        name,
+        parsedQuantity,
+        unit,
+        location,
+      )
+    }
+
+    resetEditor()
+  }
+
+  function startEditing(item: InventoryItem) {
+    setName(item.name)
+    setQuantity(String(item.quantity))
+    setUnit(item.unit)
+    setLocation(item.location)
+    setEditingId(item.id)
+  }
+
+  function handleDeleteItem(itemId: string) {
+    deleteItem(itemId)
+
+    if (editingId === itemId) {
+      resetEditor()
+    }
   }
 
   return (
@@ -46,8 +96,14 @@ function InventoryPage() {
 
       <main className="app-content">
         <Section
-          title="재료 추가"
-          description="완벽하게 적지 않아도 괜찮아요."
+          title={
+            editingId ? '재료 수정' : '재료 추가'
+          }
+          description={
+            editingId
+              ? '선택한 재료 정보를 수정해 저장하세요.'
+              : '완벽하게 적지 않아도 괜찮아요.'
+          }
         >
           <Card>
             <div className="inventory-form">
@@ -98,13 +154,39 @@ function InventoryPage() {
                 </select>
               </label>
 
-              <Button
-                fullWidth
-                onClick={handleAddItem}
-                disabled={!name.trim() || Number(quantity) <= 0}
-              >
-                재료 추가
-              </Button>
+              {editingId ? (
+                <div className="meal-editor__actions">
+                  <Button
+                    variant="secondary"
+                    fullWidth
+                    onClick={resetEditor}
+                  >
+                    취소
+                  </Button>
+
+                  <Button
+                    fullWidth
+                    onClick={handleSaveItem}
+                    disabled={
+                      !name.trim() ||
+                      Number(quantity) <= 0
+                    }
+                  >
+                    수정 저장
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  fullWidth
+                  onClick={handleSaveItem}
+                  disabled={
+                    !name.trim() ||
+                    Number(quantity) <= 0
+                  }
+                >
+                  재료 추가
+                </Button>
+              )}
             </div>
           </Card>
         </Section>
@@ -137,14 +219,28 @@ function InventoryPage() {
                       </p>
                     </div>
 
-                    <button
-                      type="button"
-                      className="inventory-item__delete"
-                      onClick={() => deleteItem(item.id)}
-                      aria-label={`${item.name} 삭제`}
-                    >
-                      삭제
-                    </button>
+                    <div className="inventory-item__actions">
+                      <Button
+                        variant="secondary"
+                        onClick={() =>
+                          startEditing(item)
+                        }
+                        aria-label={`${item.name} 수정`}
+                      >
+                        수정
+                      </Button>
+
+                      <button
+                        type="button"
+                        className="inventory-item__delete"
+                        onClick={() =>
+                          handleDeleteItem(item.id)
+                        }
+                        aria-label={`${item.name} 삭제`}
+                      >
+                        삭제
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
