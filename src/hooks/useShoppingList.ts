@@ -119,15 +119,21 @@ function useShoppingList() {
     )
   }
 
-  function toggleItem(itemId: string) {
+  function setItemsCompleted(
+    itemIds: string[],
+    completed: boolean,
+  ) {
+    const currentItems = readItems()
+    const itemIdSet = new Set(itemIds)
     const now = new Date().toISOString()
 
     saveItems(
-      items.map((item) =>
-        item.id === itemId
+      currentItems.map((item) =>
+        itemIdSet.has(item.id) &&
+        item.completed !== completed
           ? {
               ...item,
-              completed: !item.completed,
+              completed,
               updatedAt: now,
             }
           : item,
@@ -135,12 +141,20 @@ function useShoppingList() {
     )
   }
 
-  function deleteItem(itemId: string) {
-    saveItems(items.filter((item) => item.id !== itemId))
+  function deleteItems(itemIds: string[]) {
+    const itemIdSet = new Set(itemIds)
+
+    saveItems(
+      readItems().filter(
+        (item) => !itemIdSet.has(item.id),
+      ),
+    )
   }
 
   function clearCompletedItems() {
-    saveItems(items.filter((item) => !item.completed))
+    saveItems(
+      readItems().filter((item) => !item.completed),
+    )
   }
 
   return {
@@ -150,8 +164,8 @@ function useShoppingList() {
     addItem,
     addMealItems,
     removeMealItems,
-    toggleItem,
-    deleteItem,
+    setItemsCompleted,
+    deleteItems,
     clearCompletedItems,
   }
 }

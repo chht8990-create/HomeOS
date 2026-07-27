@@ -1,51 +1,77 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
 import ScreenHeader from '../components/ui/ScreenHeader'
 import Section from '../components/ui/Section'
 import useShoppingList from '../hooks/useShoppingList'
-import { groupShoppingItemsByCategory } from '../services/shoppingCategoryEngine'
-import type { ShoppingItem } from '../types/shopping'
+import {
+  groupShoppingItemsByCategory,
+  type ShoppingDisplayItem,
+} from '../services/shoppingCategoryEngine'
+
+const ITEM_TRANSITION_DELAY_MS = 600
 
 type ShoppingItemRowProps = {
-  item: ShoppingItem
-  onToggle: (itemId: string) => void
-  onDelete: (itemId: string) => void
+  item: ShoppingDisplayItem
+  isTransitioning: boolean
+  onToggle: () => void
+  onDelete: () => void
 }
 
 function ShoppingItemRow({
   item,
+  isTransitioning,
   onToggle,
   onDelete,
 }: ShoppingItemRowProps) {
+  const isVisuallyCompleted = isTransitioning
+    ? !item.completed
+    : item.completed
+
   return (
     <li
       className={`shopping-item ${
-        item.completed
+        isVisuallyCompleted
           ? 'shopping-item--completed'
+          : ''
+      } ${
+        isTransitioning
+          ? 'shopping-item--transitioning'
           : ''
       }`}
     >
       <button
         type="button"
         className="shopping-item__check"
-        onClick={() => onToggle(item.id)}
+        disabled={isTransitioning}
+        onClick={onToggle}
         aria-label={
-          item.completed
+          isVisuallyCompleted
             ? `${item.name} 구매 취소`
             : `${item.name} 구매 완료`
         }
       >
-        {item.completed ? '✓' : ''}
+        <span
+          className="shopping-item__check-mark"
+          aria-hidden="true"
+        >
+          {isVisuallyCompleted ? '✓' : ''}
+        </span>
       </button>
 
       <span className="shopping-item__name">
         <span>{item.name}</span>
 
-        {item.quantity !== undefined && item.unit ? (
+        {item.quantities.length > 0 ? (
           <small className="shopping-item__quantity">
-            {item.quantity} {item.unit}
+            {item.quantities
+              .map(({ quantity, unit }) =>
+                unit
+                  ? `${quantity} ${unit}`
+                  : String(quantity),
+              )
+              .join(' · ')}
           </small>
         ) : null}
       </span>
@@ -53,7 +79,8 @@ function ShoppingItemRow({
       <button
         type="button"
         className="shopping-item__delete"
-        onClick={() => onDelete(item.id)}
+        disabled={isTransitioning}
+        onClick={onDelete}
         aria-label={`${item.name} 삭제`}
       >
         삭제
@@ -64,18 +91,55 @@ function ShoppingItemRow({
 
 function ShoppingPage() {
   const [itemName, setItemName] = useState('')
+  const [
+    transitioningItemKeys,
+    setTransitioningItemKeys,
+  ] = useState<Set<string>>(() => new Set())
+  const transitioningItemKeysRef = useRef(
+    new Set<string>(),
+  )
+  const isMountedRef = useRef(true)
 
   const {
     items,
     remainingItems,
     completedItems,
     addItem,
-    toggleItem,
-    deleteItem,
+    setItemsCompleted,
+    deleteItems,
     clearCompletedItems,
   } = useShoppingList()
-  const categoryGroups =
+  const remainingCategoryGroups =
     groupShoppingItemsByCategory(remainingItems)
+  const completedCategoryGroups =
+    groupShoppingItemsByCategory(completedItems)
+  const remainingDisplayItems =
+    remainingCategoryGroups.flatMap(
+      (group) => group.items,
+    )
+  const completedDisplayItems =
+    completedCategoryGroups.flatMap(
+      (group) => group.items,
+    )
+  const totalDisplayItemCount =
+    remainingDisplayItems.length +
+    completedDisplayItems.length
+  const completionPercentage =
+    totalDisplayItemCount === 0
+      ? 0
+      : Math.round(
+          (completedDisplayItems.length /
+            totalDisplayItemCount) *
+            100,
+        )
+
+  useEffect(() => {
+    isMountedRef.current = true
+
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
   function handleAddItem() {
     const wasAdded = addItem(itemName)
@@ -93,6 +157,43 @@ function ShoppingPage() {
     }
   }
 
+  function handleToggleItem(
+    item: ShoppingDisplayItem,
+  ) {
+    if (transitioningItemKeysRef.current.has(item.key)) {
+      return
+    }
+
+    transitioningItemKeysRef.current.add(item.key)
+    setTransitioningItemKeys(
+      new Set(transitioningItemKeysRef.current),
+    )
+
+    window.setTimeout(() => {
+      setItemsCompleted(
+        item.itemIds,
+        !item.completed,
+      )
+      transitioningItemKeysRef.current.delete(item.key)
+
+      if (isMountedRef.current) {
+        setTransitioningItemKeys(
+          new Set(transitioningItemKeysRef.current),
+        )
+      }
+    }, ITEM_TRANSITION_DELAY_MS)
+  }
+
+  function handleDeleteItem(
+    item: ShoppingDisplayItem,
+  ) {
+    if (transitioningItemKeysRef.current.has(item.key)) {
+      return
+    }
+
+    deleteItems(item.itemIds)
+  }
+
   return (
     <>
       <ScreenHeader
@@ -104,19 +205,20 @@ function ShoppingPage() {
         <Section
           className="shopping-progress-section"
           title="구매 진행률"
-          description={`${completedItems.length} / ${items.length} 구매 완료`}
+          description={`구매 ${completedDisplayItems.length} / ${totalDisplayItemCount} · ${completionPercentage}%`}
         >
           <Card>
             <div className="shopping-progress">
               <strong className="shopping-progress__count">
-                {completedItems.length} / {items.length}
-                <span>구매 완료</span>
+                구매 {completedDisplayItems.length} /{' '}
+                {totalDisplayItemCount}
+                <span>· {completionPercentage}%</span>
               </strong>
               <progress
                 className="shopping-progress__bar"
-                value={completedItems.length}
-                max={Math.max(items.length, 1)}
-                aria-label={`${completedItems.length} / ${items.length} 구매 완료`}
+                value={completedDisplayItems.length}
+                max={Math.max(totalDisplayItemCount, 1)}
+                aria-label={`구매 ${completedDisplayItems.length} / ${totalDisplayItemCount} · ${completionPercentage}%`}
               />
             </div>
           </Card>
@@ -152,10 +254,10 @@ function ShoppingPage() {
 
         <Section
           title="장보기 목록"
-          description={`${remainingItems.length}개 남았어요`}
+          description={`${remainingDisplayItems.length}개 남았어요`}
         >
           <Card>
-            {remainingItems.length === 0 ? (
+            {remainingDisplayItems.length === 0 ? (
               <EmptyState
                 icon="🛒"
                 title={
@@ -171,7 +273,7 @@ function ShoppingPage() {
               />
             ) : (
               <div className="shopping-groups">
-                {categoryGroups.map((group) => (
+                {remainingCategoryGroups.map((group) => (
                   <details
                     key={group.category}
                     className="shopping-group"
@@ -187,10 +289,19 @@ function ShoppingPage() {
                     <ul className="shopping-list">
                       {group.items.map((item) => (
                         <ShoppingItemRow
-                          key={item.id}
+                          key={item.key}
                           item={item}
-                          onToggle={toggleItem}
-                          onDelete={deleteItem}
+                          isTransitioning={
+                            transitioningItemKeys.has(
+                              item.key,
+                            )
+                          }
+                          onToggle={() =>
+                            handleToggleItem(item)
+                          }
+                          onDelete={() =>
+                            handleDeleteItem(item)
+                          }
                         />
                       ))}
                     </ul>
@@ -204,11 +315,13 @@ function ShoppingPage() {
         <Section
           className="shopping-basket-section"
           title="장바구니"
-          description={`${completedItems.length}개 담았어요`}
+          description={`${completedDisplayItems.length}개 담았어요`}
           action={
             <Button
               variant="ghost"
-              disabled={completedItems.length === 0}
+              disabled={
+                completedDisplayItems.length === 0
+              }
               onClick={clearCompletedItems}
             >
               장바구니 비우기
@@ -216,7 +329,7 @@ function ShoppingPage() {
           }
         >
           <Card className="shopping-basket-card">
-            {completedItems.length === 0 ? (
+            {completedDisplayItems.length === 0 ? (
               <EmptyState
                 icon="🧺"
                 title="장바구니가 비어 있어요."
@@ -224,12 +337,19 @@ function ShoppingPage() {
               />
             ) : (
               <ul className="shopping-list">
-                {completedItems.map((item) => (
+                {completedDisplayItems.map((item) => (
                   <ShoppingItemRow
-                    key={item.id}
+                    key={item.key}
                     item={item}
-                    onToggle={toggleItem}
-                    onDelete={deleteItem}
+                    isTransitioning={
+                      transitioningItemKeys.has(item.key)
+                    }
+                    onToggle={() =>
+                      handleToggleItem(item)
+                    }
+                    onDelete={() =>
+                      handleDeleteItem(item)
+                    }
                   />
                 ))}
               </ul>

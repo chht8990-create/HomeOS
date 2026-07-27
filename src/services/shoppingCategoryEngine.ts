@@ -18,7 +18,20 @@ export type ShoppingCategory =
 
 export type ShoppingCategoryGroup = {
   category: ShoppingCategory
-  items: ShoppingItem[]
+  items: ShoppingDisplayItem[]
+}
+
+export type ShoppingDisplayQuantity = {
+  quantity: number
+  unit?: string
+}
+
+export type ShoppingDisplayItem = {
+  key: string
+  itemIds: string[]
+  name: string
+  completed: boolean
+  quantities: ShoppingDisplayQuantity[]
 }
 
 const categoryKeywords: Record<
@@ -187,13 +200,79 @@ export function groupShoppingItemsByCategory(
         (item) =>
           getShoppingCategory(item.name) === category,
       )
-      .map((item) => ({ ...item }))
+    const mergedItems = new Map<
+      string,
+      ShoppingDisplayItem
+    >()
 
-    return categoryItems.length > 0
+    categoryItems.forEach((item) => {
+      const normalizedName = item.name
+        .trim()
+        .toLowerCase()
+      const itemKey = [
+        category,
+        item.completed ? 'completed' : 'remaining',
+        normalizedName,
+      ].join(':')
+      const existingItem = mergedItems.get(itemKey)
+
+      if (!existingItem) {
+        mergedItems.set(itemKey, {
+          key: itemKey,
+          itemIds: [item.id],
+          name: item.name.trim(),
+          completed: item.completed,
+          quantities:
+            item.quantity === undefined
+              ? []
+              : [
+                  {
+                    quantity: item.quantity,
+                    unit: item.unit,
+                  },
+                ],
+        })
+        return
+      }
+
+      existingItem.itemIds.push(item.id)
+
+      if (item.quantity === undefined) {
+        return
+      }
+
+      const existingQuantity =
+        existingItem.quantities.find(
+          (quantity) => quantity.unit === item.unit,
+        )
+
+      if (existingQuantity) {
+        existingQuantity.quantity += item.quantity
+        return
+      }
+
+      existingItem.quantities.push({
+        quantity: item.quantity,
+        unit: item.unit,
+      })
+    })
+
+    const displayItems = Array.from(
+      mergedItems.values(),
+      (item) => ({
+        ...item,
+        itemIds: [...item.itemIds],
+        quantities: item.quantities.map(
+          (quantity) => ({ ...quantity }),
+        ),
+      }),
+    )
+
+    return displayItems.length > 0
       ? [
           {
             category,
-            items: categoryItems,
+            items: displayItems,
           },
         ]
       : []

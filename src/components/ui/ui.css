@@ -476,6 +476,9 @@
   min-height: 60px;
   padding: var(--space-sm) 0;
   border-bottom: 1px solid var(--color-border);
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease;
 }
 
 .shopping-item:last-child {
@@ -495,6 +498,15 @@
   color: transparent;
   font-weight: 800;
   cursor: pointer;
+  transition: color 160ms ease;
+}
+
+.shopping-item__check-mark {
+  position: relative;
+  z-index: 1;
+  font-size: 20px;
+  line-height: 1;
+  pointer-events: none;
 }
 
 .shopping-item__check::before {
@@ -503,6 +515,9 @@
   border: 2px solid var(--color-primary);
   border-radius: 50%;
   content: '';
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease;
 }
 
 .shopping-item--completed .shopping-item__check::before {
@@ -511,6 +526,23 @@
 
 .shopping-item--completed .shopping-item__check {
   color: white;
+}
+
+.shopping-item--transitioning {
+  border-radius: var(--radius-sm);
+  background: rgba(79, 143, 99, 0.08);
+  animation: shopping-item-confirm
+    600ms ease both;
+}
+
+.shopping-item--transitioning
+  .shopping-item__check::before {
+  transform: scale(1.08);
+}
+
+.shopping-item__check:disabled,
+.shopping-item__delete:disabled {
+  cursor: default;
 }
 
 .shopping-item__check:focus-visible,
@@ -556,6 +588,29 @@
 .shopping-basket-card {
   border-color: rgba(79, 143, 99, 0.3);
   box-shadow: none;
+}
+
+@keyframes shopping-item-confirm {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  35% {
+    opacity: 1;
+    transform: scale(0.985);
+  }
+
+  100% {
+    opacity: 0.58;
+    transform: translateY(2px) scale(0.985);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shopping-item--transitioning {
+    animation: none;
+  }
 }
 
 .inventory-form {
