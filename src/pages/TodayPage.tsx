@@ -1,17 +1,68 @@
-function TodayPage() {
+import MealBlock from '../blocks/MealBlock'
+import ShoppingSummaryBlock from '../blocks/ShoppingSummaryBlock'
+import InventorySummaryBlock from '../blocks/InventorySummaryBlock'
+import ScreenHeader from '../components/ui/ScreenHeader'
+import type { PageName } from '../components/BottomNavigation'
+
+type TodayPageProps = {
+  onChangePage: (page: PageName) => void
+}
+
+function getTodayDateKey() {
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
+function TodayPage({ onChangePage }: TodayPageProps) {
+  const todayDate = getTodayDateKey()
+
   return (
     <>
-      <header className="app-header">
-        <p className="app-name">HomeOS</p>
-        <h1>오늘</h1>
-      </header>
+      <ScreenHeader
+        title="오늘"
+        description="오늘 필요한 식사와 준비를 한눈에 확인해요."
+      />
 
       <main className="app-content">
-        <section className="welcome-card">
-          <p className="welcome-label">오늘의 식사</p>
-          <h2>우리 가족은 오늘 무엇을 먹을까요?</h2>
-          <p>아직 등록된 식사 계획이 없어요.</p>
-        </section>
+        <MealBlock
+          date={todayDate}
+          mealType="breakfast"
+          title="아침"
+          icon="🍳"
+        />
+
+        <MealBlock
+          date={todayDate}
+          mealType="lunch"
+          title="점심"
+          icon="🍱"
+        />
+
+        <MealBlock
+          date={todayDate}
+          mealType="dinner"
+          title="저녁"
+          icon="🍲"
+        />
+
+        <MealBlock
+          date={todayDate}
+          mealType="snack"
+          title="간식"
+          icon="🍓"
+        />
+
+        <ShoppingSummaryBlock
+          onOpenShopping={() => onChangePage('shopping')}
+        />
+
+        <InventorySummaryBlock
+          onOpenInventory={() => onChangePage('inventory')}
+        />
       </main>
     </>
   )

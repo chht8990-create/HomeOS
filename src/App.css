@@ -15,58 +15,13 @@ button {
   max-width: 480px;
   min-height: 100vh;
   margin: 0 auto;
-  padding: 24px 20px 104px;
-  background: #f7f5ef;
-  color: #25231f;
-}
-
-.app-header {
-  margin-bottom: 28px;
-}
-
-.app-name {
-  margin: 0 0 8px;
-  color: #777167;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-
-.app-header h1 {
-  margin: 0;
-  font-size: 32px;
-  line-height: 1.2;
+  padding: var(--space-lg) var(--text-lg) 104px;
+  background: var(--color-background);
+  color: var(--color-text);
 }
 
 .app-content {
   width: 100%;
-}
-
-.welcome-card {
-  padding: 24px;
-  border: 1px solid #e6e0d5;
-  border-radius: 24px;
-  background: #ffffff;
-  box-shadow: 0 10px 30px rgba(63, 55, 43, 0.07);
-}
-
-.welcome-label {
-  margin: 0 0 10px;
-  color: #81796d;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.welcome-card h2 {
-  margin: 0 0 12px;
-  font-size: 24px;
-  line-height: 1.4;
-}
-
-.welcome-card > p:last-child {
-  margin: 0;
-  color: #777167;
-  line-height: 1.6;
 }
 
 .bottom-navigation {
@@ -80,8 +35,9 @@ button {
   width: 100%;
   max-width: 480px;
   margin: 0 auto;
-  padding: 10px 8px max(10px, env(safe-area-inset-bottom));
-  border-top: 1px solid #e8e3da;
+  padding: 10px var(--space-sm)
+    max(10px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--color-border);
   background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(14px);
 }
@@ -95,17 +51,17 @@ button {
   padding: 7px 2px;
   border: 0;
   background: transparent;
-  color: #8a8379;
-  font-size: 12px;
+  color: var(--color-text-light);
+  font-size: var(--text-xs);
   cursor: pointer;
 }
 
 .nav-item span {
-  font-size: 12px;
+  font-size: var(--text-xs);
 }
 
 .nav-item.active {
-  color: #2f6f4e;
+  color: var(--color-primary);
   font-weight: 800;
 }
 
