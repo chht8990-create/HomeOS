@@ -1,67 +1,189 @@
-:root {
-  /* ===========================
-     HomeOS Brand Colors
-  ============================ */
+:root,
+[data-theme='light'] {
+  color-scheme: light;
+
+  /* Semantic color tokens */
+  --color-primary: #4f8f63;
+  --color-primary-hover: #3f7451;
+  --color-primary-active: #356344;
+  --color-primary-subtle: #edf5ef;
+  --color-primary-dark: var(--color-primary-hover);
+  --color-on-primary: #ffffff;
+
+  --color-secondary: #66756b;
+  --color-secondary-hover: #536158;
+  --color-secondary-subtle: #eef1ef;
+  --color-on-secondary: #ffffff;
+
+  --color-success: #2f7d4a;
+  --color-success-subtle: #eaf5ed;
+  --color-warning: #a86316;
+  --color-warning-subtle: #fff4df;
+  --color-danger: #ba3f3b;
+  --color-danger-hover: #9f302d;
+  --color-danger-subtle: #fceceb;
 
   --color-background: #f7f5ef;
   --color-surface: #ffffff;
-
-  --color-primary: #4f8f63;
-  --color-primary-dark: #3f7451;
-
-  --color-text: #25231f;
-  --color-text-light: #777167;
-
+  --color-surface-raised: #ffffff;
+  --color-surface-sunken: #f1eee7;
+  --color-overlay: rgba(37, 35, 31, 0.48);
   --color-border: #e6e0d5;
+  --color-border-strong: #cbc4b8;
+  --color-text: #25231f;
+  --color-text-muted: #777167;
+  --color-text-disabled: #aaa399;
+  --color-text-light: var(--color-text-muted);
+  --color-focus-ring: rgba(79, 143, 99, 0.25);
 
-  /* ===========================
-     Radius
-  ============================ */
+  /* Typography */
+  --font-family-base:
+    Pretendard,
+    'Pretendard Variable',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'Noto Sans KR',
+    'Apple SD Gothic Neo',
+    'Malgun Gothic',
+    sans-serif;
+  --font-family-number:
+    'Pretendard Variable',
+    Pretendard,
+    'Segoe UI',
+    sans-serif;
 
+  --font-size-h1: 32px;
+  --font-size-h2: 20px;
+  --font-size-h3: 18px;
+  --font-size-body: 16px;
+  --font-size-caption: 14px;
+  --font-size-button: 16px;
+  --font-size-number: 24px;
+
+  --line-height-heading: 1.3;
+  --line-height-body: 1.6;
+  --line-height-control: 1.3;
+  --letter-spacing-heading: -0.02em;
+  --letter-spacing-number: -0.02em;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+
+  /* Legacy type aliases */
+  --text-xs: 12px;
+  --text-sm: var(--font-size-caption);
+  --text-md: var(--font-size-body);
+  --text-lg: var(--font-size-h2);
+  --text-xl: var(--font-size-h1);
+
+  /* 4px spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Legacy spacing aliases */
+  --space-xs: var(--space-1);
+  --space-sm: var(--space-2);
+  --space-md: var(--space-4);
+  --space-lg: var(--space-6);
+  --space-xl: var(--space-8);
+
+  /* Radius */
   --radius-sm: 12px;
   --radius-md: 18px;
   --radius-lg: 24px;
+  --radius-pill: 999px;
+  --radius-card: var(--radius-lg);
+  --radius-button: var(--radius-md);
+  --radius-input: var(--radius-md);
+  --radius-dialog: var(--radius-lg);
 
-  /* ===========================
-     Shadow
-  ============================ */
+  /* Elevation */
+  --shadow-sm: 0 2px 10px rgba(63, 55, 43, 0.06);
+  --shadow-md: 0 10px 30px rgba(63, 55, 43, 0.08);
+  --shadow-lg: 0 20px 48px rgba(37, 35, 31, 0.16);
+  --shadow-card: var(--shadow-md);
 
-  --shadow-card:
-    0 10px 30px rgba(63,55,43,.08);
+  /* Motion */
+  --motion-duration-fast: 160ms;
+  --motion-duration-base: 240ms;
+  --motion-duration-slow: 320ms;
+  --motion-duration-check: 600ms;
+  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-emphasized: cubic-bezier(0.2, 0, 0, 1.2);
 
-  /* ===========================
-     Spacing
-  ============================ */
+  /* Layout and layering */
+  --control-height-md: 48px;
+  --control-height-touch: 44px;
+  --content-width-mobile: 480px;
+  --content-width-tablet: 720px;
+  --content-width-desktop: 1120px;
+  --breakpoint-mobile-sm: 360px;
+  --breakpoint-mobile-md: 390px;
+  --breakpoint-mobile-lg: 430px;
+  --breakpoint-tablet: 768px;
+  --breakpoint-desktop: 1200px;
+  --z-sticky: 5;
+  --z-navigation: 10;
+  --z-floating: 20;
+  --z-toast: 40;
+  --z-dialog: 50;
+}
 
-  --space-xs: 4px;
-  --space-sm: 8px;
-  --space-md: 16px;
-  --space-lg: 24px;
-  --space-xl: 32px;
+[data-theme='dark'] {
+  color-scheme: dark;
 
-  /* ===========================
-     Typography
-  ============================ */
+  --color-primary: #73b486;
+  --color-primary-hover: #87c397;
+  --color-primary-active: #9aceaa;
+  --color-primary-subtle: #223a2a;
+  --color-primary-dark: var(--color-primary-hover);
+  --color-on-primary: #102416;
 
-  --text-xs: 12px;
-  --text-sm: 14px;
-  --text-md: 16px;
-  --text-lg: 20px;
-  --text-xl: 32px;
---font-family-base:
-  Pretendard,
-  "Pretendard Variable",
-  -apple-system,
-  BlinkMacSystemFont,
-  "Segoe UI",
-  "Noto Sans KR",
-  "Apple SD Gothic Neo",
-  "Malgun Gothic",
-  sans-serif;
+  --color-secondary: #9aaba0;
+  --color-secondary-hover: #afbeb4;
+  --color-secondary-subtle: #2b312d;
+  --color-on-secondary: #17201a;
 
---font-weight-regular: 400;
---font-weight-medium: 500;
---font-weight-semibold: 600;
---font-weight-bold: 700;
---font-weight-extrabold: 800;
+  --color-success: #6fc487;
+  --color-success-subtle: #1e3927;
+  --color-warning: #e2ad5f;
+  --color-warning-subtle: #3d2e18;
+  --color-danger: #e88782;
+  --color-danger-hover: #f19b96;
+  --color-danger-subtle: #442321;
+
+  --color-background: #171915;
+  --color-surface: #20231e;
+  --color-surface-raised: #282c26;
+  --color-surface-sunken: #131511;
+  --color-overlay: rgba(0, 0, 0, 0.68);
+  --color-border: #363b33;
+  --color-border-strong: #535a50;
+  --color-text: #f1eee7;
+  --color-text-muted: #aaa99f;
+  --color-text-disabled: #74776f;
+  --color-text-light: var(--color-text-muted);
+  --color-focus-ring: rgba(115, 180, 134, 0.34);
+
+  --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.28);
+  --shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.4);
+  --shadow-card: var(--shadow-md);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-fast: 1ms;
+    --motion-duration-base: 1ms;
+    --motion-duration-slow: 1ms;
+    --motion-duration-check: 1ms;
+  }
 }
