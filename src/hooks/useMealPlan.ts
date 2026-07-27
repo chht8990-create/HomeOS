@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
+  appendMealPlans,
   parseMealPlans,
   removeMealPlan,
   upsertMealPlan,
@@ -11,6 +12,8 @@ import {
   type PlannerShoppingChange,
 } from '../services/mealPlanIntegrationEngine'
 import type { PlannedMeal } from '../types/meal'
+import type { Recipe } from '../types/recipe'
+import useRecipes from './useRecipes'
 
 const STORAGE_KEY = 'homeos.mealPlan.items'
 const CHANGE_EVENT = 'homeos:meal-plan-changed'
@@ -53,6 +56,7 @@ function readMealPlans(): PlannedMeal[] {
 }
 
 function useMealPlan() {
+  const { recipes } = useRecipes()
   const [mealPlans, setMealPlans] =
     useState<PlannedMeal[]>(readMealPlans)
 
@@ -100,6 +104,7 @@ function useMealPlan() {
     const shoppingChange = createPlannerShoppingChange(
       nextMealPlans,
       input,
+      recipes,
       previousId,
     )
 
@@ -123,10 +128,46 @@ function useMealPlan() {
     )
   }
 
+  function importMealPlans(
+    importedMealPlans: PlannedMeal[],
+    availableRecipes: Recipe[],
+  ) {
+    if (importedMealPlans.length === 0) {
+      return
+    }
+
+    const nextMealPlans = appendMealPlans(
+      mealPlans,
+      importedMealPlans,
+    )
+
+    saveMealPlans(nextMealPlans)
+
+    importedMealPlans.forEach((mealPlan) => {
+      const shoppingChange =
+        createPlannerShoppingChange(
+          nextMealPlans,
+          {
+            date: mealPlan.date,
+            type: mealPlan.type,
+            name: mealPlan.name,
+          },
+          availableRecipes,
+        )
+
+      if (shoppingChange) {
+        dispatchPlannerShoppingChange(
+          shoppingChange,
+        )
+      }
+    })
+  }
+
   return {
     mealPlans,
     saveMealPlan,
     deleteMealPlan,
+    importMealPlans,
   }
 }
 

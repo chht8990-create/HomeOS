@@ -2,6 +2,7 @@ import type { MealPlanInput } from './mealPlanEngine'
 import { findRecipeByMealName } from './recipeEngine'
 import type { Ingredient } from '../types/ingredient'
 import type { PlannedMeal } from '../types/meal'
+import type { Recipe } from '../types/recipe'
 
 export type PlannerShoppingChange = {
   sourceId: string
@@ -18,6 +19,7 @@ export function createPlannerShoppingSourceId(
 export function createPlannerShoppingChange(
   mealPlans: PlannedMeal[],
   input: MealPlanInput,
+  recipes: Recipe[],
   previousMealPlanId?: string,
 ): PlannerShoppingChange | null {
   const savedMealPlan = mealPlans.find(
@@ -36,7 +38,10 @@ export function createPlannerShoppingChange(
   const previousSourceId = previousMealPlanId
     ? createPlannerShoppingSourceId(previousMealPlanId)
     : undefined
-  const recipe = findRecipeByMealName(savedMealPlan.name)
+  const recipe = findRecipeByMealName(
+    savedMealPlan.name,
+    recipes,
+  )
 
   return {
     sourceId,

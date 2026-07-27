@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { findRecipeByMealName } from '../services/recipeEngine'
 import type { MealType, StoredMeal } from '../types/meal'
+import useRecipes from './useRecipes'
 
 export type MealEditorStatus =
   | 'empty'
@@ -59,6 +60,7 @@ function loadStoredMeal(
 }
 
 function useMeal({ date, mealType }: UseMealOptions) {
+  const { recipes } = useRecipes()
   const storageKey =
     `homeos.meal.${date}.${mealType}`
 
@@ -118,7 +120,10 @@ function useMeal({ date, mealType }: UseMealOptions) {
     )
 
     const recipe =
-      findRecipeByMealName(trimmedMealName)
+      findRecipeByMealName(
+        trimmedMealName,
+        recipes,
+      )
 
     if (recipe) {
       window.dispatchEvent(

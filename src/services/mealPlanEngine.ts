@@ -113,3 +113,13 @@ export function removeMealPlan(
     (mealPlan) => mealPlan.id !== mealPlanId,
   )
 }
+
+export function appendMealPlans(
+  mealPlans: PlannedMeal[],
+  newMealPlans: PlannedMeal[],
+): PlannedMeal[] {
+  return sortMealPlans([
+    ...mealPlans.map((mealPlan) => ({ ...mealPlan })),
+    ...newMealPlans.map((mealPlan) => ({ ...mealPlan })),
+  ])
+}

@@ -1,6 +1,9 @@
-import { recipes } from '../data/recipes'
+import type { Recipe } from '../types/recipe'
 
-export function findRecipeByMealName(mealName: string) {
+export function findRecipeByMealName(
+  mealName: string,
+  recipes: Recipe[],
+) {
   const normalizedMealName = mealName
     .trim()
     .replace(/\s+/g, '')
