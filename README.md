@@ -1,5 +1,31 @@
 # React + TypeScript + Vite
 
+## HomeOS AI 추천 설정
+
+AI 메뉴 추천은 브라우저가 OpenAI를 직접 호출하지 않고
+`/api/ai/recipe-recommendation` Vercel Function을 통해
+실행됩니다. 브라우저에는 냉장고 재료의 이름·수량·단위만
+전송하며, API 키는 서버 환경변수에서만 읽습니다.
+
+로컬에서는 `.env.example`을 참고해 `.env.local`을 만들고
+다음 값을 설정한 뒤 `npm run dev`를 실행합니다.
+
+```text
+OPENAI_API_KEY=your_server_key
+OPENAI_MODEL=gpt-5.6-luna
+```
+
+Vercel에서는 프로젝트의 **Settings → Environment
+Variables**에 같은 이름으로 설정한 뒤 다시 배포합니다.
+`OPENAI_API_KEY`에 `VITE_` 접두사를 붙이면 브라우저 번들에
+노출될 수 있으므로 사용하지 않습니다.
+
+키가 없어도 HomeOS의 기존 로컬 추천과 나머지 기능은
+정상적으로 동작하며, AI 추천 영역에만 설정 안내가
+표시됩니다. 실제 API를 호출하지 않고 로컬 화면을 점검할
+때만 `HOMEOS_AI_MOCK=true`를 사용할 수 있으며 production
+환경에서는 무시됩니다.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

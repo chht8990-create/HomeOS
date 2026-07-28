@@ -1,4 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
+import {
+  Check,
+  ChevronDown,
+  ShoppingBasket,
+  ShoppingCart,
+} from 'lucide-react'
+import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
@@ -28,6 +35,11 @@ function ShoppingItemRow({
   const isVisuallyCompleted = isTransitioning
     ? !item.completed
     : item.completed
+  const isMealGenerated =
+    item.sourceTypes.includes('meal')
+  const isMixedSource =
+    isMealGenerated &&
+    item.sourceTypes.includes('manual')
 
   return (
     <li
@@ -48,7 +60,7 @@ function ShoppingItemRow({
         onClick={onToggle}
         aria-label={
           isVisuallyCompleted
-            ? `${item.name} 구매 취소`
+            ? `${item.name} 구매 완료 취소`
             : `${item.name} 구매 완료`
         }
       >
@@ -56,12 +68,26 @@ function ShoppingItemRow({
           className="shopping-item__check-mark"
           aria-hidden="true"
         >
-          {isVisuallyCompleted ? '✓' : ''}
+          {isVisuallyCompleted ? (
+            <Check size={20} strokeWidth={2.5} />
+          ) : null}
         </span>
       </button>
 
       <span className="shopping-item__name">
-        <span>{item.name}</span>
+        <span className="shopping-item__title">
+          <span>{item.name}</span>
+          {isMealGenerated ? (
+            <Badge
+              className="shopping-item__source"
+              tone="primary"
+            >
+              {isMixedSource
+                ? '식사 일정·직접 추가'
+                : '식사 일정에서 추가'}
+            </Badge>
+          ) : null}
+        </span>
 
         {item.quantities.length > 0 ? (
           <small className="shopping-item__quantity">
@@ -81,7 +107,9 @@ function ShoppingItemRow({
         className="shopping-item__delete"
         disabled={isTransitioning}
         onClick={onDelete}
-        aria-label={`${item.name} 삭제`}
+        aria-label={`${item.name}${
+          isMealGenerated ? ' 식사 일정 항목' : ''
+        } 목록에서 삭제`}
       >
         삭제
       </button>
@@ -116,7 +144,6 @@ function ShoppingPage() {
     useRef<HTMLInputElement>(null)
 
   const {
-    items,
     remainingItems,
     completedItems,
     addItem,
@@ -148,6 +175,7 @@ function ShoppingPage() {
             totalDisplayItemCount) *
             100,
         )
+  const isShoppingEmpty = totalDisplayItemCount === 0
 
   useEffect(() => {
     isMountedRef.current = true
@@ -296,7 +324,7 @@ function ShoppingPage() {
 
       if (appliedItemCount > 0) {
         setInventoryApplyMessage(
-          `재고 ${appliedItemCount}개 품목 반영 완료`,
+          `냉장고에 ${appliedItemCount}가지 재료를 넣었어요.`,
         )
       }
     } finally {
@@ -308,36 +336,38 @@ function ShoppingPage() {
   return (
     <>
       <ScreenHeader
-        title="장보기"
-        description="필요한 재료를 한곳에 모아 편하게 확인해요."
+        title="장보기 목록"
+        description="필요한 품목을 확인하고 하나씩 체크해 보세요."
       />
 
       <main className="app-content">
-        <Section
-          className="shopping-progress-section"
-          title="구매 진행률"
-          description={`구매 ${completedDisplayItems.length} / ${totalDisplayItemCount} · ${completionPercentage}%`}
-        >
-          <Card>
-            <div className="shopping-progress">
-              <strong className="shopping-progress__count">
-                구매 {completedDisplayItems.length} /{' '}
-                {totalDisplayItemCount}
-                <span>· {completionPercentage}%</span>
-              </strong>
-              <progress
-                className="shopping-progress__bar"
-                value={completedDisplayItems.length}
-                max={Math.max(totalDisplayItemCount, 1)}
-                aria-label={`구매 ${completedDisplayItems.length} / ${totalDisplayItemCount} · ${completionPercentage}%`}
-              />
-            </div>
-          </Card>
-        </Section>
+        {!isShoppingEmpty ? (
+          <Section
+            className="shopping-progress-section"
+            title="장보기 진행률"
+            description={`완료 ${completedDisplayItems.length} / ${totalDisplayItemCount} · ${completionPercentage}%`}
+          >
+            <Card>
+              <div className="shopping-progress">
+                <strong className="shopping-progress__count">
+                  완료 {completedDisplayItems.length} /{' '}
+                  {totalDisplayItemCount}
+                  <span>· {completionPercentage}%</span>
+                </strong>
+                <progress
+                  className="shopping-progress__bar"
+                  value={completedDisplayItems.length}
+                  max={Math.max(totalDisplayItemCount, 1)}
+                  aria-label={`장보기 완료 ${completedDisplayItems.length} / ${totalDisplayItemCount} · ${completionPercentage}%`}
+                />
+              </div>
+            </Card>
+          </Section>
+        ) : null}
 
         <Section
-          title="항목 추가"
-          description="필요한 재료를 바로 적어두세요."
+          title="빠르게 추가하기"
+          description="필요한 품목을 목록에 추가하세요."
         >
           <Card>
             <div className="shopping-add">
@@ -351,7 +381,7 @@ function ShoppingPage() {
                 }
                 onKeyDown={handleKeyDown}
                 placeholder="예: 우유"
-                aria-label="장보기 항목"
+                aria-label="구매할 품목"
               />
 
               <Button
@@ -361,141 +391,151 @@ function ShoppingPage() {
                 추가
               </Button>
             </div>
+
+            {isShoppingEmpty ? (
+              <p className="shopping-empty-hint">
+                품목을 추가하면 목록과 진행률이 표시돼요.
+              </p>
+            ) : null}
           </Card>
         </Section>
 
-        <Section
-          title="장보기 목록"
-          description={`${remainingDisplayItems.length}개 남았어요`}
-        >
-          <Card>
-            {remainingDisplayItems.length === 0 ? (
-              <EmptyState
-                icon="🛒"
-                title={
-                  items.length === 0
-                    ? '장보기 목록이 비어 있어요.'
-                    : '살 물건을 모두 담았어요.'
-                }
-                description={
-                  items.length === 0
-                    ? '필요한 재료를 위에서 추가해보세요.'
-                    : '담은 물건은 아래 장바구니에서 확인할 수 있어요.'
-                }
-              />
-            ) : (
-              <div className="shopping-groups">
-                {remainingCategoryGroups.map((group) => (
-                  <details
-                    key={group.category}
-                    className="shopping-group"
-                    open
-                  >
-                    <summary>
-                      <span>{group.category}</span>
-                      <span>
-                        {group.items.length}개
-                      </span>
-                    </summary>
-
-                    <ul className="shopping-list">
-                      {group.items.map((item) => (
-                        <ShoppingItemRow
-                          key={item.key}
-                          item={item}
-                          isTransitioning={
-                            transitioningItemKeys.has(
-                              item.key,
-                            )
-                          }
-                          onToggle={() =>
-                            handleToggleItem(item)
-                          }
-                          onDelete={() =>
-                            handleDeleteItem(item)
-                          }
-                        />
-                      ))}
-                    </ul>
-                  </details>
-                ))}
-              </div>
-            )}
-          </Card>
-        </Section>
-
-        <Section
-          className="shopping-basket-section"
-          title="장바구니"
-          description={`${completedDisplayItems.length}개 담았어요`}
-          action={
-            <Button
-              variant="ghost"
-              disabled={
-                completedDisplayItems.length === 0
-              }
-              onClick={clearCompletedItems}
+        {!isShoppingEmpty ? (
+          <>
+            <Section
+              title="구매할 품목"
+              description={`${remainingDisplayItems.length}개 남았어요`}
             >
-              장바구니 비우기
-            </Button>
-          }
-        >
-          <Card className="shopping-basket-card">
-            <div className="shopping-basket-actions">
-              <Button
-                fullWidth
-                disabled={
-                  completedItems.length === 0 ||
-                  isApplyingInventory
-                }
-                onClick={handleApplyBasketToInventory}
-              >
-                장바구니를 재고에 반영
-              </Button>
-
-              {inventoryApplyMessage ? (
-                <p role="status">
-                  {inventoryApplyMessage}
-                </p>
-              ) : null}
-            </div>
-
-            {completedDisplayItems.length === 0 ? (
-              <EmptyState
-                icon="🧺"
-                title="장바구니가 비어 있어요."
-                description="구매한 항목을 체크하면 이곳으로 이동해요."
-              />
-            ) : (
-              <ul className="shopping-list">
-                {completedDisplayItems.map((item) => (
-                  <ShoppingItemRow
-                    key={item.key}
-                    item={item}
-                    isTransitioning={
-                      transitioningItemKeys.has(item.key)
-                    }
-                    onToggle={() =>
-                      handleToggleItem(item)
-                    }
-                    onDelete={() =>
-                      handleDeleteItem(item)
-                    }
+              <Card>
+                {remainingDisplayItems.length === 0 ? (
+                  <EmptyState
+                    icon={<ShoppingCart />}
+                    title="모든 품목을 구매했어요."
+                    description="구매한 품목은 아래에서 확인할 수 있어요."
                   />
-                ))}
-              </ul>
-            )}
-          </Card>
-        </Section>
+                ) : (
+                  <div className="shopping-groups">
+                    {remainingCategoryGroups.map((group) => (
+                      <details
+                        key={group.category}
+                        className="shopping-group"
+                        open
+                      >
+                        <summary>
+                          <span>{group.category}</span>
+                          <span className="shopping-group__count">
+                            {group.items.length}개
+                          </span>
+                          <ChevronDown
+                            className="shopping-group__chevron"
+                            size={20}
+                            strokeWidth={2.2}
+                            aria-hidden="true"
+                          />
+                        </summary>
+
+                        <ul className="shopping-list">
+                          {group.items.map((item) => (
+                            <ShoppingItemRow
+                              key={item.key}
+                              item={item}
+                              isTransitioning={
+                                transitioningItemKeys.has(
+                                  item.key,
+                                )
+                              }
+                              onToggle={() =>
+                                handleToggleItem(item)
+                              }
+                              onDelete={() =>
+                                handleDeleteItem(item)
+                              }
+                            />
+                          ))}
+                        </ul>
+                      </details>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            </Section>
+
+            <Section
+              className="shopping-basket-section"
+              title="구매 완료"
+              description={`${completedDisplayItems.length}개 완료했어요`}
+              action={
+                <Button
+                  variant="ghost"
+                  disabled={
+                    completedDisplayItems.length === 0
+                  }
+                  onClick={clearCompletedItems}
+                >
+                  완료 목록 비우기
+                </Button>
+              }
+            >
+              <Card className="shopping-basket-card">
+                <div className="shopping-basket-actions">
+                  <Button
+                    fullWidth
+                    disabled={
+                      completedItems.length === 0 ||
+                      isApplyingInventory
+                    }
+                    onClick={handleApplyBasketToInventory}
+                  >
+                    구매한 품목을 냉장고에 넣기
+                  </Button>
+
+                  {inventoryApplyMessage ? (
+                    <p role="status">
+                      {inventoryApplyMessage}
+                    </p>
+                  ) : null}
+                </div>
+
+                {completedDisplayItems.length === 0 ? (
+                  <EmptyState
+                    icon={<ShoppingBasket />}
+                    title="아직 구매 완료한 품목이 없어요."
+                    description="품목을 체크하면 이곳으로 이동해요."
+                  />
+                ) : (
+                  <ul className="shopping-list">
+                    {completedDisplayItems.map((item) => (
+                      <ShoppingItemRow
+                        key={item.key}
+                        item={item}
+                        isTransitioning={
+                          transitioningItemKeys.has(
+                            item.key,
+                          )
+                        }
+                        onToggle={() =>
+                          handleToggleItem(item)
+                        }
+                        onDelete={() =>
+                          handleDeleteItem(item)
+                        }
+                      />
+                    ))}
+                  </ul>
+                )}
+              </Card>
+            </Section>
+          </>
+        ) : null}
       </main>
 
       {isQuickAddVisible ? (
         <Button
           className="shopping-quick-add"
-          aria-label="항목 추가 입력창으로 이동"
+          aria-label="품목 입력으로 이동"
           onClick={handleQuickAdd}
         >
-          + 항목 추가
+          + 품목 추가
         </Button>
       ) : null}
     </>

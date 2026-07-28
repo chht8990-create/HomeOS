@@ -24,8 +24,8 @@ function TodayPage({ onChangePage }: TodayPageProps) {
   return (
     <>
       <ScreenHeader
-        title="오늘"
-        description="오늘 필요한 식사와 준비를 한눈에 확인해요."
+        title="홈"
+        description="오늘 식사와 준비할 일을 확인하세요."
       />
 
       <main className="app-content">

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { mergeIngredients } from '../services/ingredientMergeEngine'
 import { calculateMissingIngredients } from '../services/inventoryEngine'
 import {
+  createManualIngredientShoppingItems,
   createManualShoppingItem,
   createMealShoppingItems,
 } from '../services/shoppingEngine'
@@ -82,6 +83,20 @@ function useShoppingList() {
 
     saveItems([...items, newItem])
     return true
+  }
+
+  function addIngredientItems(
+    ingredients: Ingredient[],
+  ) {
+    const newItems =
+      createManualIngredientShoppingItems(ingredients)
+
+    if (newItems.length === 0) {
+      return 0
+    }
+
+    saveItems([...readItems(), ...newItems])
+    return newItems.length
   }
 
   function addMealItems(
@@ -207,6 +222,7 @@ function useShoppingList() {
     remainingItems: items.filter((item) => !item.completed),
     completedItems: items.filter((item) => item.completed),
     addItem,
+    addIngredientItems,
     addMealItems,
     removeMealItems,
     setItemsCompleted,

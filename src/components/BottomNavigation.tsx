@@ -1,8 +1,18 @@
+import {
+  ChefHat,
+  CircleUser,
+  Home,
+  PackageOpen,
+  ShoppingCart,
+  type LucideIcon,
+} from 'lucide-react'
+
 export type PageName =
   | 'today'
   | 'mealPlan'
   | 'shopping'
   | 'inventory'
+  | 'recipes'
   | 'settings'
 
 type BottomNavigationProps = {
@@ -13,12 +23,29 @@ type BottomNavigationProps = {
 const navigationItems: {
   page: PageName
   label: string
+  icon: LucideIcon
 }[] = [
-  { page: 'today', label: '오늘' },
-  { page: 'mealPlan', label: '식단' },
-  { page: 'shopping', label: '장보기' },
-  { page: 'inventory', label: '재고' },
-  { page: 'settings', label: '설정' },
+  { page: 'today', label: '홈', icon: Home },
+  {
+    page: 'recipes',
+    label: '레시피',
+    icon: ChefHat,
+  },
+  {
+    page: 'shopping',
+    label: '장보기',
+    icon: ShoppingCart,
+  },
+  {
+    page: 'inventory',
+    label: '냉장고',
+    icon: PackageOpen,
+  },
+  {
+    page: 'settings',
+    label: '더보기',
+    icon: CircleUser,
+  },
 ]
 
 function BottomNavigation({
@@ -29,16 +56,31 @@ function BottomNavigation({
     <nav className="bottom-navigation" aria-label="주요 메뉴">
       {navigationItems.map((item) => {
         const isActive = currentPage === item.page
+        const NavigationIcon = item.icon
 
         return (
           <button
             key={item.page}
             type="button"
             className={`nav-item ${isActive ? 'active' : ''}`}
-            onClick={() => onChangePage(item.page)}
+            onClick={
+              isActive
+                ? undefined
+                : () => onChangePage(item.page)
+            }
+            aria-current={isActive ? 'page' : undefined}
           >
-            <span aria-hidden="true">{isActive ? '●' : '○'}</span>
-            {item.label}
+            <span className="nav-item__surface">
+              <NavigationIcon
+                className="nav-item__icon"
+                size={22}
+                strokeWidth={isActive ? 2.4 : 2}
+                aria-hidden="true"
+              />
+              <span className="nav-item__label">
+                {item.label}
+              </span>
+            </span>
           </button>
         )
       })}

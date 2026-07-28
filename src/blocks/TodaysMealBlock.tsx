@@ -1,3 +1,4 @@
+import { Utensils } from 'lucide-react'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
@@ -20,7 +21,7 @@ function TodaysMealBlock() {
 
   function handleDeleteDinner() {
     const shouldDelete = window.confirm(
-      '등록한 오늘 저녁 식단을 지울까요?',
+      '등록한 오늘 저녁 일정을 삭제할까요?',
     )
 
     if (shouldDelete) {
@@ -31,14 +32,14 @@ function TodaysMealBlock() {
   return (
     <Section
       title="오늘의 식사"
-      description="오늘 무엇을 먹을지 함께 결정해볼까요?"
+      description="오늘 먹을 메뉴를 정해 보세요."
     >
       <Card>
         {mealStatus === 'empty' ? (
           <EmptyState
-            icon="🍽️"
-            title="아직 오늘 식단이 없어요."
-            description="저녁 메뉴를 정하거나 오늘은 쉬어갈 수 있어요."
+            icon={<Utensils />}
+            title="오늘 저녁, 아직 비어 있어요."
+            description="먹고 싶은 메뉴부터 정해 보세요."
             action={
               <div className="meal-empty-actions">
                 <Button fullWidth onClick={startEditing}>
@@ -79,7 +80,7 @@ function TodaysMealBlock() {
               />
 
               <p className="meal-editor__help">
-                가족과 함께 먹을 메뉴 이름을 적어주세요.
+                먹고 싶은 메뉴 이름을 입력하세요.
               </p>
             </div>
 
@@ -113,7 +114,7 @@ function TodaysMealBlock() {
               <p className="meal-plan-preview__label">오늘 저녁</p>
               <h3 className="meal-plan-preview__title">{savedMealName}</h3>
               <p className="meal-plan-preview__description">
-                가족과 함께 먹을 저녁 식사로 등록했어요.
+                오늘 저녁 일정에 저장했어요.
               </p>
             </div>
 
@@ -123,7 +124,7 @@ function TodaysMealBlock() {
                 fullWidth
                 onClick={startEditing}
               >
-                다시 정하기
+                수정
               </Button>
 
               <Button
@@ -131,7 +132,7 @@ function TodaysMealBlock() {
                 fullWidth
                 onClick={handleDeleteDinner}
               >
-                식단 지우기
+                삭제
               </Button>
             </div>
           </div>
@@ -163,7 +164,7 @@ function TodaysMealBlock() {
                 fullWidth
                 onClick={clearDinner}
               >
-                결정 취소
+                기록 삭제
               </Button>
             </div>
           </div>

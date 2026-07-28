@@ -2,6 +2,10 @@ import {
   useState,
   type ChangeEvent,
 } from 'react'
+import {
+  PackageOpen,
+  Upload,
+} from 'lucide-react'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
@@ -92,7 +96,7 @@ function SettingsPage() {
     }
 
     const shouldApply = window.confirm(
-      `${preview.mealPack.pack.name}을(를) 가져올까요? 충돌 항목은 건너뜁니다.`,
+      `${preview.mealPack.pack.name} 식사 꾸러미를 가져올까요? 겹치는 내용은 그대로 두고 새 내용만 더해요.`,
     )
 
     if (!shouldApply) {
@@ -110,7 +114,7 @@ function SettingsPage() {
     setPreview(null)
     setErrors([])
     setSuccessMessage(
-      `Recipe ${recipeCount}개와 Planner ${mealPlanCount}개를 가져왔습니다.`,
+      `레시피 ${recipeCount}개와 식사 일정 ${mealPlanCount}개를 가져왔어요.`,
     )
   }
 
@@ -133,7 +137,7 @@ function SettingsPage() {
     const backup = exportBackup()
 
     setBackupStatus(
-      `HomeOS 전체 백업을 저장했습니다. (${backup.exportedAt})`,
+      `백업 파일을 저장했어요. (${backup.exportedAt})`,
     )
   }
 
@@ -177,7 +181,7 @@ function SettingsPage() {
     }
 
     const shouldApply = window.confirm(
-      '이 백업으로 HomeOS 전체 데이터를 복원할까요? 현재 데이터는 먼저 자동 백업됩니다.',
+      '이 백업으로 오늘식탁 데이터를 복원할까요? 복원 전에 현재 데이터를 자동으로 백업합니다.',
     )
 
     if (!shouldApply) {
@@ -190,32 +194,79 @@ function SettingsPage() {
   return (
     <>
       <ScreenHeader
-        title="설정"
-        description="Meal Pack으로 Recipe와 식단 계획을 한 번에 가져오세요."
+        title="더보기"
+        description="앱 정보와 데이터 관리 기능을 확인하세요."
       />
 
       <main className="app-content">
         <Section
-          title="Meal Pack 가져오기"
-          description="JSON 파일을 확인한 뒤 기존 데이터에 추가합니다."
+          title="오늘식탁 정보"
+          description="오늘식탁은 데이터를 이 기기에 저장해요."
+        >
+          <Card className="settings-brand-card">
+            <div className="settings-brand-card__identity">
+              <img
+                src="/brand/today-table-icon-192.png"
+                alt=""
+              />
+              <div>
+                <strong>오늘식탁</strong>
+                <span>오늘 뭐 먹지?</span>
+              </div>
+            </div>
+
+            <ul className="inventory-list">
+              <li className="inventory-item">
+                <strong>앱 버전</strong>
+                <span>1.0.0</span>
+              </li>
+              <li className="inventory-item">
+                <strong>데이터 저장 위치</strong>
+                <span>이 기기</span>
+              </li>
+              <li className="inventory-item">
+                <strong>개인정보 전송</strong>
+                <span>하지 않음</span>
+              </li>
+            </ul>
+          </Card>
+        </Section>
+
+        <Section
+          title="식사 꾸러미 가져오기"
+          description="식사 꾸러미 파일을 선택해 레시피와 일정을 추가하세요."
         >
           <Card>
             <div className="inventory-form">
-              <label className="inventory-form__field">
-                Meal Pack JSON
+              <label className="settings-file-picker">
+                <span className="settings-file-picker__label">
+                  식사 꾸러미 파일
+                </span>
                 <input
                   key={fileInputKey}
+                  className="settings-file-picker__native"
                   type="file"
                   accept=".json,application/json"
                   onChange={handleFileChange}
+                  aria-label="식사 꾸러미 파일"
+                  aria-describedby="meal-pack-file-status"
                 />
+                <span
+                  className="settings-file-picker__button"
+                  aria-hidden="true"
+                >
+                  <Upload size={18} strokeWidth={2.2} />
+                  파일 선택
+                </span>
+                <span
+                  id="meal-pack-file-status"
+                  className="settings-file-picker__filename"
+                  aria-live="polite"
+                >
+                  {selectedFileName ||
+                    '선택한 파일 없음'}
+                </span>
               </label>
-
-              {selectedFileName && (
-                <p className="meal-editor__help">
-                  선택한 파일: {selectedFileName}
-                </p>
-              )}
             </div>
 
             {errors.length > 0 && (
@@ -237,9 +288,9 @@ function SettingsPage() {
               errors.length === 0 &&
               !successMessage && (
                 <EmptyState
-                  icon="📦"
-                  title="선택한 Meal Pack이 없어요."
-                  description="JSON 파일을 선택하면 메타데이터와 적용 내용을 먼저 보여드려요."
+                  icon={<PackageOpen />}
+                  title="식사 꾸러미 파일을 선택하세요."
+                  description="가져오기 전에 레시피와 일정을 미리 확인할 수 있어요."
                 />
               )}
 
@@ -253,13 +304,13 @@ function SettingsPage() {
                 >
                   <ul className="inventory-list">
                     <li className="inventory-item">
-                      <strong>Pack ID</strong>
+                      <strong>꾸러미 이름</strong>
                       <span>
                         {preview.mealPack.pack.id}
                       </span>
                     </li>
                     <li className="inventory-item">
-                      <strong>형식 버전</strong>
+                      <strong>파일 형식</strong>
                       <span>
                         {
                           preview.mealPack.pack
@@ -303,8 +354,8 @@ function SettingsPage() {
                 </Section>
 
                 <Section
-                  title={`Recipe ${preview.mealPack.recipes.length}개`}
-                  description={`적용 ${preview.recipesToImport.length}개`}
+                  title={`레시피 ${preview.mealPack.recipes.length}개`}
+                  description={`${preview.recipesToImport.length}개를 추가할 수 있어요.`}
                 >
                   <ul className="inventory-list">
                     {preview.mealPack.recipes.map(
@@ -325,8 +376,8 @@ function SettingsPage() {
                 </Section>
 
                 <Section
-                  title={`Planner ${preview.mealPack.plannedMeals.length}개`}
-                  description={`적용 ${preview.plannedMealsToImport.length}개`}
+                  title={`식사 일정 ${preview.mealPack.plannedMeals.length}개`}
+                  description={`${preview.plannedMealsToImport.length}개를 추가할 수 있어요.`}
                 >
                   <ul className="inventory-list">
                     {preview.mealPack.plannedMeals.map(
@@ -357,8 +408,8 @@ function SettingsPage() {
 
                 {preview.conflicts.length > 0 && (
                   <Section
-                    title={`충돌 ${preview.conflicts.length}건`}
-                    description="기존 데이터를 유지하고 아래 항목은 건너뜁니다."
+                    title={`이미 있는 내용 ${preview.conflicts.length}개`}
+                    description="기존 데이터는 유지되며 중복 항목은 추가하지 않아요."
                   >
                     <ul>
                       {preview.conflicts.map(
@@ -388,7 +439,7 @@ function SettingsPage() {
                     disabled={!hasImportableItems}
                     onClick={handleApply}
                   >
-                    가져오기 적용
+                    이 꾸러미 가져오기
                   </Button>
                 </div>
               </>
@@ -397,8 +448,8 @@ function SettingsPage() {
         </Section>
 
         <Section
-          title="HomeOS 전체 백업/복원"
-          description="Inventory, Shopping, Planner, Recipe 등 HomeOS 데이터를 한 파일로 보관하고 복원합니다."
+          title="전체 데이터 백업 및 복원"
+          description="냉장고, 장보기 목록, 식사 일정을 파일로 저장하고 복원하세요."
         >
           <Card>
             <div className="inventory-form">
@@ -410,25 +461,38 @@ function SettingsPage() {
               </Button>
 
               <p className="meal-editor__help">
-                복원할 때는 현재 데이터를 먼저 자동
-                백업한 뒤 선택한 파일을 적용합니다.
+                복원 전 현재 데이터를 자동으로 백업해요.
               </p>
 
-              <label className="inventory-form__field">
-                HomeOS 백업 JSON
+              <label className="settings-file-picker">
+                <span className="settings-file-picker__label">
+                  복원할 백업 파일
+                </span>
                 <input
                   key={backupFileInputKey}
+                  className="settings-file-picker__native"
                   type="file"
                   accept=".json,application/json"
                   onChange={handleBackupFileChange}
+                  aria-label="복원할 백업 파일"
+                  aria-describedby="backup-file-status"
                 />
+                <span
+                  className="settings-file-picker__button"
+                  aria-hidden="true"
+                >
+                  <Upload size={18} strokeWidth={2.2} />
+                  파일 선택
+                </span>
+                <span
+                  id="backup-file-status"
+                  className="settings-file-picker__filename"
+                  aria-live="polite"
+                >
+                  {backupFileName ||
+                    '선택한 파일 없음'}
+                </span>
               </label>
-
-              {backupFileName ? (
-                <p className="meal-editor__help">
-                  선택한 파일: {backupFileName}
-                </p>
-              ) : null}
             </div>
 
             {backupErrors.length > 0 ? (
@@ -448,12 +512,12 @@ function SettingsPage() {
 
             {backupPreview ? (
               <Section
-                title="백업 미리보기"
-                description={`내보낸 시각: ${backupPreview.exportedAt}`}
+                title="백업 내용 미리보기"
+                description={`백업 시각: ${backupPreview.exportedAt}`}
               >
                 <ul className="inventory-list">
                   <li className="inventory-item">
-                    <strong>Inventory</strong>
+                    <strong>냉장고</strong>
                     <span>
                       {
                         backupPreview.data.inventory
@@ -463,7 +527,7 @@ function SettingsPage() {
                     </span>
                   </li>
                   <li className="inventory-item">
-                    <strong>Shopping</strong>
+                    <strong>장보기 목록</strong>
                     <span>
                       {
                         backupPreview.data.shopping
@@ -473,7 +537,7 @@ function SettingsPage() {
                     </span>
                   </li>
                   <li className="inventory-item">
-                    <strong>Planner</strong>
+                    <strong>식사 일정</strong>
                     <span>
                       {
                         backupPreview.data.planner
@@ -483,7 +547,7 @@ function SettingsPage() {
                     </span>
                   </li>
                   <li className="inventory-item">
-                    <strong>Imported Recipe</strong>
+                    <strong>가져온 레시피</strong>
                     <span>
                       {
                         backupPreview.data.recipes
@@ -507,7 +571,7 @@ function SettingsPage() {
                     fullWidth
                     onClick={handleBackupApply}
                   >
-                    전체 백업 복원
+                    이 백업으로 복원
                   </Button>
                 </div>
               </Section>

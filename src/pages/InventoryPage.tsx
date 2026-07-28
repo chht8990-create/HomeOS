@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { PackageOpen } from 'lucide-react'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
@@ -17,6 +18,7 @@ const locationLabels: Record<InventoryLocation, string> = {
 }
 
 function InventoryPage() {
+  const nameInputRef = useRef<HTMLInputElement>(null)
   const [name, setName] = useState('')
   const [quantity, setQuantity] = useState('1')
   const [unit, setUnit] = useState('개')
@@ -87,29 +89,42 @@ function InventoryPage() {
     }
   }
 
+  function focusInventoryEditor() {
+    nameInputRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+    })
+    nameInputRef.current?.focus({
+      preventScroll: true,
+    })
+  }
+
   return (
     <>
       <ScreenHeader
-        title="재고"
-        description="집에 있는 재료를 간단하게 기록해요."
+        title="냉장고"
+        description="보관 중인 재료를 확인하고 관리하세요."
       />
 
       <main className="app-content">
         <Section
           title={
-            editingId ? '재료 수정' : '재료 추가'
+            editingId
+              ? '재료 정보 수정'
+              : '재료 추가하기'
           }
           description={
             editingId
-              ? '선택한 재료 정보를 수정해 저장하세요.'
-              : '완벽하게 적지 않아도 괜찮아요.'
+              ? '이름, 수량, 단위, 보관 위치를 수정하세요.'
+              : '냉장고나 찬장에 있는 재료를 추가하세요.'
           }
         >
           <Card>
             <div className="inventory-form">
               <label className="inventory-form__field">
-                <span>재료명</span>
+                <span>재료 이름</span>
                 <input
+                  ref={nameInputRef}
                   type="text"
                   value={name}
                   onChange={(event) => setName(event.target.value)}
@@ -141,7 +156,7 @@ function InventoryPage() {
               </div>
 
               <label className="inventory-form__field">
-                <span>보관 위치</span>
+                  <span>보관 위치</span>
                 <select
                   value={location}
                   onChange={(event) =>
@@ -172,7 +187,7 @@ function InventoryPage() {
                       Number(quantity) <= 0
                     }
                   >
-                    수정 저장
+                    수정 내용 저장
                   </Button>
                 </div>
               ) : (
@@ -192,15 +207,20 @@ function InventoryPage() {
         </Section>
 
         <Section
-          title="보유 재료"
-          description={`현재 ${items.length}개를 기록하고 있어요.`}
+          title="보관 중인 재료"
+          description={`${items.length}개 품목이 있어요.`}
         >
           <Card>
             {items.length === 0 ? (
               <EmptyState
-                icon="🥬"
-                title="등록된 재료가 없어요."
-                description="냉장고나 찬장에 있는 재료부터 하나씩 추가해보세요."
+                icon={<PackageOpen />}
+                title="아직 등록한 재료가 없어요."
+                description="집에 있는 재료부터 추가해 보세요."
+                action={
+                  <Button onClick={focusInventoryEditor}>
+                    재료 추가하기
+                  </Button>
+                }
               />
             ) : (
               <ul className="inventory-list">
@@ -225,7 +245,7 @@ function InventoryPage() {
                         onClick={() =>
                           startEditing(item)
                         }
-                        aria-label={`${item.name} 수정`}
+                        aria-label={`${item.name} 정보 수정`}
                       >
                         수정
                       </Button>

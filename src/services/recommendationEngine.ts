@@ -11,6 +11,22 @@ export type RecipeRecommendation = {
   isInventorySufficient: boolean
 }
 
+export function calculateRecipeReadinessPercent(
+  requiredIngredientCount: number,
+  missingIngredientCount: number,
+) {
+  if (requiredIngredientCount === 0) {
+    return 0
+  }
+
+  return Math.round(
+    ((requiredIngredientCount -
+      missingIngredientCount) /
+      requiredIngredientCount) *
+      100,
+  )
+}
+
 export function recommendRecipes(
   recipes: Recipe[],
   inventoryItems: InventoryItem[],

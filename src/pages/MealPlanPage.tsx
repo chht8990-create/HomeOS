@@ -1,10 +1,18 @@
-import { useState, type FormEvent } from 'react'
+import {
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react'
+import { CalendarDays } from 'lucide-react'
 import RecipeRecommendationBlock from '../blocks/RecipeRecommendationBlock'
+import type { PageName } from '../components/BottomNavigation'
+import RecipeSpaceSwitcher from '../components/RecipeSpaceSwitcher'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
 import ScreenHeader from '../components/ui/ScreenHeader'
 import Section from '../components/ui/Section'
+import Toast from '../components/ui/Toast'
 import useMealPlan from '../hooks/useMealPlan'
 import type { MealType, PlannedMeal } from '../types/meal'
 
@@ -34,7 +42,27 @@ function getTodayDateKey() {
   return `${year}-${month}-${day}`
 }
 
-function MealPlanPage() {
+type MealPlanPageProps = {
+  initialRecipeName?: string
+  onChangePage: (page: PageName) => void
+  onOpenRecipeDetail: (recipeId: string) => void
+}
+
+type MealPlanFeedback = {
+  tone: 'success' | 'danger'
+  title: string
+  message: string
+}
+
+function MealPlanPage({
+  initialRecipeName,
+  onChangePage,
+  onOpenRecipeDetail,
+}: MealPlanPageProps) {
+  const mealNameInputRef =
+    useRef<HTMLInputElement>(null)
+  const mealPlansSectionRef =
+    useRef<HTMLDivElement>(null)
   const {
     mealPlans,
     saveMealPlan,
@@ -43,9 +71,13 @@ function MealPlanPage() {
   const [date, setDate] = useState(getTodayDateKey)
   const [mealType, setMealType] =
     useState<MealType>('dinner')
-  const [mealName, setMealName] = useState('')
+  const [mealName, setMealName] = useState(
+    initialRecipeName ?? '',
+  )
   const [editingId, setEditingId] =
     useState<string | null>(null)
+  const [feedback, setFeedback] =
+    useState<MealPlanFeedback | null>(null)
 
   function resetEditor() {
     setMealName('')
@@ -59,15 +91,41 @@ function MealPlanPage() {
       return
     }
 
-    saveMealPlan(
-      {
-        date,
-        type: mealType,
-        name: mealName,
-      },
-      editingId ?? undefined,
-    )
-    resetEditor()
+    const savedMealName = mealName.trim()
+    const wasEditing = Boolean(editingId)
+
+    try {
+      saveMealPlan(
+        {
+          date,
+          type: mealType,
+          name: savedMealName,
+        },
+        editingId ?? undefined,
+      )
+      resetEditor()
+      setFeedback({
+        tone: 'success',
+        title: wasEditing
+          ? '식사 일정을 수정했어요.'
+          : '식사 일정을 저장했어요.',
+        message: `${savedMealName} 일정을 아래에서 확인해 보세요.`,
+      })
+
+      window.requestAnimationFrame(() => {
+        mealPlansSectionRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        })
+      })
+    } catch {
+      setFeedback({
+        tone: 'danger',
+        title: '식사 일정을 저장하지 못했어요.',
+        message:
+          '잠시 후 다시 시도해 주세요. 입력한 내용은 그대로 두었어요.',
+      })
+    }
   }
 
   function startEditing(mealPlan: PlannedMeal) {
@@ -75,11 +133,12 @@ function MealPlanPage() {
     setMealType(mealPlan.type)
     setMealName(mealPlan.name)
     setEditingId(mealPlan.id)
+    setFeedback(null)
   }
 
   function handleDelete(mealPlan: PlannedMeal) {
     const shouldDelete = window.confirm(
-      `${mealPlan.name} 식단을 삭제할까요?`,
+      `${mealPlan.name} 일정을 삭제할까요?`,
     )
 
     if (!shouldDelete) {
@@ -93,17 +152,46 @@ function MealPlanPage() {
     }
   }
 
+  function focusMealPlanEditor() {
+    mealNameInputRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+    })
+    mealNameInputRef.current?.focus({
+      preventScroll: true,
+    })
+  }
+
+  function handleSelectRecommendedRecipe(
+    recipeName: string,
+  ) {
+    setMealName(recipeName)
+    setFeedback(null)
+
+    window.requestAnimationFrame(() => {
+      focusMealPlanEditor()
+    })
+  }
+
   return (
     <>
       <ScreenHeader
-        title="식단 계획"
-        description="날짜와 식사 시간별로 메뉴를 계획해 보세요."
+        title="이번 주 식사"
+        description="먹을 메뉴를 날짜별로 계획해 보세요."
       />
 
       <main className="app-content">
+        <RecipeSpaceSwitcher
+          activeSpace="planner"
+          onOpenPlanner={() => undefined}
+          onOpenRecipes={() =>
+            onChangePage('recipes')
+          }
+        />
+
         <Section
-          title={editingId ? '식단 수정' : '식단 추가'}
-          description="같은 날짜와 식사 시간에 저장하면 기존 계획을 수정합니다."
+          title={editingId ? '식사 일정 수정' : '식사 일정 추가'}
+          description="날짜, 식사 시간, 메뉴를 입력하세요."
         >
           <Card>
             <form
@@ -124,7 +212,7 @@ function MealPlanPage() {
                 </label>
 
                 <label className="inventory-form__field">
-                  식사
+                  식사 시간
                   <select
                     value={mealType}
                     onChange={(event) =>
@@ -146,8 +234,9 @@ function MealPlanPage() {
               </div>
 
               <label className="inventory-form__field">
-                메뉴
+                메뉴 이름
                 <input
+                  ref={mealNameInputRef}
                   type="text"
                   value={mealName}
                   onChange={(event) =>
@@ -173,7 +262,7 @@ function MealPlanPage() {
                     fullWidth
                     disabled={!date || !mealName.trim()}
                   >
-                    수정 저장
+                    수정 내용 저장
                   </Button>
                 </div>
               ) : (
@@ -182,76 +271,103 @@ function MealPlanPage() {
                   fullWidth
                   disabled={!date || !mealName.trim()}
                 >
-                  식단 저장
+                  식사 일정 추가
                 </Button>
               )}
             </form>
           </Card>
         </Section>
 
-        <RecipeRecommendationBlock
-          onSelectRecipe={setMealName}
-        />
-
-        <Section
-          title="저장된 식단"
-          description={`${mealPlans.length}개의 계획이 있습니다.`}
+        <div
+          ref={mealPlansSectionRef}
+          className="meal-plan-schedule"
         >
-          <Card>
-            {mealPlans.length === 0 ? (
-              <EmptyState
-                icon="🍽️"
-                title="아직 계획한 식단이 없어요."
-                description="날짜와 메뉴를 선택해 첫 식단을 저장해 보세요."
-              />
-            ) : (
-              <ul className="inventory-list">
-                {mealPlans.map((mealPlan) => (
-                  <li
-                    key={mealPlan.id}
-                    className="inventory-item"
-                  >
-                    <div className="inventory-item__content">
-                      <div className="inventory-item__top">
-                        <strong>{mealPlan.name}</strong>
-                        <span className="inventory-item__location">
-                          {mealTypeLabels[mealPlan.type]}
-                        </span>
+          <Section
+            title="저장된 식사 일정"
+            description={`${mealPlans.length}개의 일정이 있어요.`}
+          >
+            <Card>
+              {mealPlans.length === 0 ? (
+                <EmptyState
+                  icon={<CalendarDays />}
+                  title="아직 저장된 식사 일정이 없어요."
+                  description="첫 메뉴부터 계획해 보세요."
+                  action={
+                    <Button onClick={focusMealPlanEditor}>
+                      첫 일정 추가
+                    </Button>
+                  }
+                />
+              ) : (
+                <ul className="inventory-list">
+                  {mealPlans.map((mealPlan) => (
+                    <li
+                      key={mealPlan.id}
+                      className="inventory-item"
+                    >
+                      <div className="inventory-item__content">
+                        <div className="inventory-item__top">
+                          <strong>{mealPlan.name}</strong>
+                          <span className="inventory-item__location">
+                            {
+                              mealTypeLabels[
+                                mealPlan.type
+                              ]
+                            }
+                          </span>
+                        </div>
+
+                        <p>
+                          <time dateTime={mealPlan.date}>
+                            {mealPlan.date}
+                          </time>
+                        </p>
                       </div>
 
-                      <p>
-                        <time dateTime={mealPlan.date}>
-                          {mealPlan.date}
-                        </time>
-                      </p>
-                    </div>
+                      <div className="inventory-item__actions">
+                        <Button
+                          variant="secondary"
+                          onClick={() =>
+                            startEditing(mealPlan)
+                          }
+                        >
+                          수정
+                        </Button>
 
-                    <div>
-                      <Button
-                        variant="secondary"
-                        onClick={() =>
-                          startEditing(mealPlan)
-                        }
-                      >
-                        수정
-                      </Button>
+                        <Button
+                          variant="danger"
+                          onClick={() =>
+                            handleDelete(mealPlan)
+                          }
+                        >
+                          삭제
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+          </Section>
+        </div>
 
-                      <Button
-                        variant="ghost"
-                        onClick={() =>
-                          handleDelete(mealPlan)
-                        }
-                      >
-                        삭제
-                      </Button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-        </Section>
+        <RecipeRecommendationBlock
+          onSelectRecipe={
+            handleSelectRecommendedRecipe
+          }
+          onViewRecipe={onOpenRecipeDetail}
+        />
       </main>
+
+      {feedback ? (
+        <Toast
+          tone={feedback.tone}
+          title={feedback.title}
+          onDismiss={() => setFeedback(null)}
+        >
+          {feedback.message}
+        </Toast>
+      ) : null}
     </>
   )
 }

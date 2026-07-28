@@ -1,4 +1,7 @@
-import type { ShoppingItem } from '../types/shopping'
+import type {
+  ShoppingItem,
+  ShoppingItemSource,
+} from '../types/shopping'
 
 export const SHOPPING_CATEGORIES = [
   '채소',
@@ -32,6 +35,7 @@ export type ShoppingDisplayItem = {
   name: string
   completed: boolean
   quantities: ShoppingDisplayQuantity[]
+  sourceTypes: ShoppingItemSource[]
 }
 
 const categoryKeywords: Record<
@@ -222,6 +226,7 @@ export function groupShoppingItemsByCategory(
           itemIds: [item.id],
           name: item.name.trim(),
           completed: item.completed,
+          sourceTypes: [item.source],
           quantities:
             item.quantity === undefined
               ? []
@@ -236,6 +241,10 @@ export function groupShoppingItemsByCategory(
       }
 
       existingItem.itemIds.push(item.id)
+
+      if (!existingItem.sourceTypes.includes(item.source)) {
+        existingItem.sourceTypes.push(item.source)
+      }
 
       if (item.quantity === undefined) {
         return
@@ -262,6 +271,7 @@ export function groupShoppingItemsByCategory(
       (item) => ({
         ...item,
         itemIds: [...item.itemIds],
+        sourceTypes: [...item.sourceTypes],
         quantities: item.quantities.map(
           (quantity) => ({ ...quantity }),
         ),

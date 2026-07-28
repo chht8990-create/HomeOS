@@ -28,6 +28,39 @@ export function createManualShoppingItem(name: string): ShoppingItem | null {
   }
 }
 
+export function createManualIngredientShoppingItems(
+  ingredients: Ingredient[],
+): ShoppingItem[] {
+  const now = new Date().toISOString()
+
+  return ingredients.flatMap((ingredient) => {
+    const name = ingredient.name.trim()
+    const unit = ingredient.unit.trim()
+
+    if (
+      !name ||
+      !unit ||
+      !Number.isFinite(ingredient.quantity) ||
+      ingredient.quantity <= 0
+    ) {
+      return []
+    }
+
+    return [
+      {
+        id: createShoppingItemId(),
+        name,
+        quantity: ingredient.quantity,
+        unit,
+        completed: false,
+        source: 'manual' as const,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]
+  })
+}
+
 export function createMealShoppingItems(
   sourceId: string,
   ingredients: Ingredient[],

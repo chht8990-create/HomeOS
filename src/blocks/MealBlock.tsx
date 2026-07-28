@@ -1,3 +1,4 @@
+import { Utensils } from 'lucide-react'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
@@ -36,7 +37,7 @@ function MealBlock({
 
   function handleDeleteMeal() {
     const shouldDelete = window.confirm(
-      `등록한 ${title} 식단을 지울까요?`,
+      `등록한 ${title} 식사 일정을 삭제할까요?`,
     )
 
     if (shouldDelete) {
@@ -52,9 +53,9 @@ function MealBlock({
       <Card>
         {mealStatus === 'empty' ? (
           <EmptyState
-            icon={icon}
-            title={`아직 ${title} 식단이 없어요.`}
-            description={`${title} 메뉴를 정하거나 오늘은 쉬어갈 수 있어요.`}
+            icon={<Utensils />}
+            title={`${title}, 무엇을 먹을까요?`}
+            description={`먹고 싶은 ${title} 메뉴부터 정해 보세요.`}
             action={
               <div className="meal-empty-actions">
                 <Button fullWidth onClick={startEditing}>
@@ -98,7 +99,7 @@ function MealBlock({
               />
 
               <p className="meal-editor__help">
-                가족과 함께 먹을 메뉴 이름을 적어주세요.
+                먹고 싶은 메뉴 이름을 입력하세요.
               </p>
             </div>
 
@@ -134,7 +135,7 @@ function MealBlock({
                 {savedMealName}
               </h3>
               <p className="meal-plan-preview__description">
-                가족과 함께 먹을 식사로 등록했어요.
+                식사 일정에 저장했어요.
               </p>
             </div>
 
@@ -144,7 +145,7 @@ function MealBlock({
                 fullWidth
                 onClick={startEditing}
               >
-                다시 정하기
+                수정
               </Button>
 
               <Button
@@ -152,7 +153,7 @@ function MealBlock({
                 fullWidth
                 onClick={handleDeleteMeal}
               >
-                식단 지우기
+                삭제
               </Button>
             </div>
           </div>
@@ -184,7 +185,7 @@ function MealBlock({
                 fullWidth
                 onClick={clearMeal}
               >
-                결정 취소
+                기록 삭제
               </Button>
             </div>
           </div>

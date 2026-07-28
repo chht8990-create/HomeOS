@@ -1,3 +1,4 @@
+import { CalendarDays } from 'lucide-react'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
@@ -30,22 +31,22 @@ function TodayPlannerSummaryBlock({
 
   return (
     <Section
-      title="오늘 Planner 일정"
-      description="날짜별로 계획한 오늘 메뉴를 확인해요."
+      title="오늘 식사"
+      description="오늘 먹을 메뉴를 확인하세요."
     >
       <Card>
         {todayMealPlans.length === 0 ? (
           <EmptyState
-            icon="📅"
-            title="오늘 계획된 식단이 없어요."
-            description="식단 Planner에서 오늘 메뉴를 계획해보세요."
+            icon={<CalendarDays />}
+            title="오늘 식사 일정을 정해 볼까요?"
+            description="먹고 싶은 메뉴부터 추가해 보세요."
             action={
               <Button
                 variant="secondary"
                 fullWidth
                 onClick={onOpenPlanner}
               >
-                식단 Planner 열기
+                식사 일정 추가
               </Button>
             }
           />
@@ -60,7 +61,7 @@ function TodayPlannerSummaryBlock({
 
             <div className="meal-plan-preview__content">
               <p className="meal-plan-preview__label">
-                오늘 예정된 식단
+                오늘 식사 일정
               </p>
 
               <h3 className="meal-plan-preview__title">
@@ -78,7 +79,7 @@ function TodayPlannerSummaryBlock({
             </div>
 
             <Button fullWidth onClick={onOpenPlanner}>
-              식단 Planner 열기
+              이번 주 식사 보기
             </Button>
           </div>
         )}

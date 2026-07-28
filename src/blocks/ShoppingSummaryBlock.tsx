@@ -1,3 +1,4 @@
+import { ShoppingCart } from 'lucide-react'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
@@ -16,22 +17,22 @@ function ShoppingSummaryBlock({
 
   return (
     <Section
-      title="오늘 필요한 장보기"
-      description="아직 사지 않은 재료를 확인해요."
+      title="장보기 목록"
+      description="필요한 품목을 확인하세요."
     >
       <Card>
         {itemCount === 0 ? (
           <EmptyState
-            icon="🛒"
-            title="필요한 장보기가 없어요."
-            description="재료가 필요하면 장보기 목록에 추가해보세요."
+            icon={<ShoppingCart />}
+            title="장보기 목록이 비어 있어요."
+            description="필요한 품목을 추가해 보세요."
             action={
               <Button
                 variant="secondary"
                 fullWidth
                 onClick={onOpenShopping}
               >
-                장보기 열기
+                장보기 목록 보기
               </Button>
             }
           />
@@ -43,7 +44,7 @@ function ShoppingSummaryBlock({
 
             <div className="shopping-summary__content">
               <p className="shopping-summary__label">
-                아직 사지 않은 재료
+                구매할 품목
               </p>
 
               <h3 className="shopping-summary__title">
@@ -51,12 +52,12 @@ function ShoppingSummaryBlock({
               </h3>
 
               <p className="shopping-summary__description">
-                장을 볼 때 목록을 하나씩 확인해보세요.
+                장볼 때 하나씩 체크해 보세요.
               </p>
             </div>
 
             <Button fullWidth onClick={onOpenShopping}>
-              장보기 열기
+              장보기 목록 보기
             </Button>
           </div>
         )}

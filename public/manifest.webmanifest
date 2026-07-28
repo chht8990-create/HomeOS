@@ -1,0 +1,31 @@
+{
+  "name": "오늘식탁",
+  "short_name": "오늘식탁",
+  "description": "오늘 메뉴부터 장보기와 냉장고까지, 우리 가족의 식사 생활 앱",
+  "lang": "ko-KR",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#FAF7F0",
+  "theme_color": "#4E8B67",
+  "icons": [
+    {
+      "src": "/brand/today-table-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/brand/today-table-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/brand/today-table-icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
