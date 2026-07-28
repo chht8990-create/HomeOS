@@ -6,13 +6,13 @@ import {
   normalizeAiRecipeRecommendations,
   parseAiRecipeRecommendationOutput,
   validateAiRecipeRecommendationRequest,
-} from '../../src/services/aiRecipeRecommendationEngine.ts'
+} from '../../src/services/aiRecipeRecommendationEngine.js'
 import type {
   AiInventoryIngredient,
   AiRecipeRecommendation,
   AiRecipeRecommendationRequest,
   AiRecipeRecommendationResponse,
-} from '../../src/types/aiRecipeRecommendation.ts'
+} from '../../src/types/aiRecipeRecommendation.js'
 
 const OPENAI_RESPONSES_URL =
   'https://api.openai.com/v1/responses'
