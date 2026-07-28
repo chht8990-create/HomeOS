@@ -40,6 +40,8 @@ try {
   )
   const {
     handleAiRecipeRecommendation,
+    mapOpenAiError,
+    parseOpenAiErrorDetails,
   } = await vite.ssrLoadModule(
     '/api/ai/recipe-recommendation.ts',
   )
@@ -423,6 +425,47 @@ try {
 
       assert.equal(response.status, 503)
       assert.equal(body.code, 'AI_NOT_CONFIGURED')
+    },
+  )
+
+  await check(
+    'AI endpoint: upstream 오류 메타데이터를 제한하고 비밀값을 제거',
+    () => {
+      const details = parseOpenAiErrorDetails(
+        401,
+        JSON.stringify({
+          error: {
+            type: 'invalid_request_error',
+            code: 'invalid_api_key',
+            param: null,
+            message:
+              'Incorrect API key provided: sk-testsecretvalue',
+          },
+        }),
+        'req_test',
+      )
+
+      assert.deepEqual(details, {
+        upstreamStatus: 401,
+        errorType: 'invalid_request_error',
+        errorCode: 'invalid_api_key',
+        errorParam: null,
+        errorMessage:
+          'Incorrect API key provided: [redacted]',
+        requestId: 'req_test',
+      })
+    },
+  )
+
+  await check(
+    'AI endpoint: upstream 상태를 안전한 사용자 오류로 구분',
+    () => {
+      assert.equal(mapOpenAiError(400).status, 400)
+      assert.equal(mapOpenAiError(401).status, 401)
+      assert.equal(mapOpenAiError(403).status, 403)
+      assert.equal(mapOpenAiError(429).status, 429)
+      assert.equal(mapOpenAiError(500).status, 503)
+      assert.equal(mapOpenAiError(418).status, 502)
     },
   )
 

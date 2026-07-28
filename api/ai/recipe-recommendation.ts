@@ -23,11 +23,28 @@ const MAX_REQUEST_BYTES = 20_000
 const MAX_RESPONSE_BYTES = 100_000
 const DUPLICATE_WINDOW_MS = 30_000
 const MAX_CACHE_ENTRIES = 25
+const MAX_ERROR_FIELD_LENGTH = 120
+const MAX_ERROR_MESSAGE_LENGTH = 240
 
 type AiUsage = {
   inputTokens: number
   outputTokens: number
   totalTokens: number
+}
+
+export type OpenAiErrorDetails = {
+  upstreamStatus: number
+  errorType: string | null
+  errorCode: string | null
+  errorParam: string | null
+  errorMessage: string | null
+  requestId: string | null
+}
+
+type MappedOpenAiError = {
+  code: string
+  message: string
+  status: number
 }
 
 export type AiServerEnvironment = {
@@ -309,6 +326,145 @@ function logAiInvocation(
   )
 }
 
+function sanitizeErrorField(
+  value: unknown,
+  maxLength: number,
+) {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const sanitized = value
+    .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]')
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, '[redacted]')
+    .split('')
+    .map((character) => {
+      const codePoint = character.charCodeAt(0)
+
+      return codePoint < 32 || codePoint === 127
+        ? ' '
+        : character
+    })
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  return sanitized
+    ? sanitized.slice(0, maxLength)
+    : null
+}
+
+export function parseOpenAiErrorDetails(
+  upstreamStatus: number,
+  responseText: string,
+  requestId: string | null,
+): OpenAiErrorDetails {
+  let error: Record<string, unknown> | null = null
+
+  try {
+    const parsed = JSON.parse(responseText) as unknown
+
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      'error' in parsed &&
+      typeof parsed.error === 'object' &&
+      parsed.error !== null
+    ) {
+      error = parsed.error as Record<string, unknown>
+    }
+  } catch {
+    // Non-JSON responses are represented by status and request ID only.
+  }
+
+  return {
+    upstreamStatus,
+    errorType: sanitizeErrorField(
+      error?.type,
+      MAX_ERROR_FIELD_LENGTH,
+    ),
+    errorCode: sanitizeErrorField(
+      error?.code,
+      MAX_ERROR_FIELD_LENGTH,
+    ),
+    errorParam: sanitizeErrorField(
+      error?.param,
+      MAX_ERROR_FIELD_LENGTH,
+    ),
+    errorMessage: sanitizeErrorField(
+      error?.message,
+      MAX_ERROR_MESSAGE_LENGTH,
+    ),
+    requestId: sanitizeErrorField(
+      requestId,
+      MAX_ERROR_FIELD_LENGTH,
+    ),
+  }
+}
+
+export function mapOpenAiError(
+  upstreamStatus: number,
+): MappedOpenAiError {
+  if (upstreamStatus === 400) {
+    return {
+      code: 'AI_REQUEST_REJECTED',
+      message:
+        'AI 요청 형식 또는 결과 형식 설정을 확인해 주세요.',
+      status: 400,
+    }
+  }
+
+  if (upstreamStatus === 401) {
+    return {
+      code: 'AI_AUTHENTICATION_FAILED',
+      message:
+        'AI 서비스 인증 설정을 확인해 주세요.',
+      status: 401,
+    }
+  }
+
+  if (upstreamStatus === 403) {
+    return {
+      code: 'AI_PERMISSION_DENIED',
+      message:
+        'AI 서비스의 프로젝트 또는 모델 권한을 확인해 주세요.',
+      status: 403,
+    }
+  }
+
+  if (upstreamStatus === 429) {
+    return {
+      code: 'AI_LIMIT_REACHED',
+      message:
+        'AI 사용 한도 또는 요청 제한에 도달했어요. 잠시 후 다시 시도해 주세요.',
+      status: 429,
+    }
+  }
+
+  if (upstreamStatus >= 500) {
+    return {
+      code: 'AI_SERVICE_UNAVAILABLE',
+      message:
+        'AI 서비스가 일시적으로 불안정해요. 잠시 후 다시 시도해 주세요.',
+      status: 503,
+    }
+  }
+
+  return {
+    code: 'AI_UPSTREAM_ERROR',
+    message:
+      'AI 추천을 불러오지 못했어요. 기존 추천을 이용해 주세요.',
+    status: 502,
+  }
+}
+
+function logOpenAiError(details: OpenAiErrorDetails) {
+  console.error(
+    '[homeos-ai-upstream]',
+    JSON.stringify(details),
+  )
+}
+
 function extractResponseText(value: unknown) {
   if (
     typeof value === 'object' &&
@@ -565,14 +721,30 @@ async function requestOpenAi(
 
     const responseText = await openAiResponse.text()
 
-    if (
-      responseText.length > MAX_RESPONSE_BYTES ||
-      !openAiResponse.ok
-    ) {
+    if (!openAiResponse.ok) {
+      const details = parseOpenAiErrorDetails(
+        openAiResponse.status,
+        responseText,
+        openAiResponse.headers.get('x-request-id'),
+      )
+      const mappedError = mapOpenAiError(
+        details.upstreamStatus,
+      )
+
+      logOpenAiError(details)
       finishInvocation(false)
       return createErrorResponse(
-        'AI_UPSTREAM_ERROR',
-        'AI 추천을 불러오지 못했어요. 기존 추천을 이용해 주세요.',
+        mappedError.code,
+        mappedError.message,
+        mappedError.status,
+      )
+    }
+
+    if (responseText.length > MAX_RESPONSE_BYTES) {
+      finishInvocation(false)
+      return createErrorResponse(
+        'AI_RESPONSE_INVALID',
+        'AI 추천 결과를 안전하게 읽지 못했어요.',
         502,
       )
     }
