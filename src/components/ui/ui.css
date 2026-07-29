@@ -278,7 +278,10 @@
 
 .meal-editor__actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(180px, 100%), 1fr)
+  );
   width: 100%;
   gap: var(--space-sm);
   margin-top: var(--space-lg);

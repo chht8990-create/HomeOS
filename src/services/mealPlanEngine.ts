@@ -4,6 +4,9 @@ export type MealPlanInput = {
   date: string
   type: MealType
   name: string
+  recipeId?: string
+  servings?: number
+  source?: PlannedMeal['source']
 }
 
 const mealTypeOrder: Record<MealType, number> = {
@@ -40,7 +43,16 @@ function isPlannedMeal(value: unknown): value is PlannedMeal {
     meal.status === 'planned' &&
     typeof meal.name === 'string' &&
     typeof meal.createdAt === 'string' &&
-    typeof meal.updatedAt === 'string'
+    typeof meal.updatedAt === 'string' &&
+    (meal.recipeId === undefined ||
+      typeof meal.recipeId === 'string') &&
+    (meal.servings === undefined ||
+      (typeof meal.servings === 'number' &&
+        meal.servings > 0)) &&
+    (meal.source === undefined ||
+      meal.source === 'manual' ||
+      meal.source === 'default' ||
+      meal.source === 'ai-trial')
   )
 }
 
@@ -93,6 +105,18 @@ export function upsertMealPlan(
     type: input.type,
     status: 'planned',
     name: trimmedName,
+    ...(input.recipeId
+      ? { recipeId: input.recipeId }
+      : existingPlan?.recipeId
+        ? { recipeId: existingPlan.recipeId }
+        : {}),
+    ...(input.servings
+      ? { servings: input.servings }
+      : existingPlan?.servings
+        ? { servings: existingPlan.servings }
+        : {}),
+    source:
+      input.source ?? existingPlan?.source ?? 'manual',
     createdAt: existingPlan?.createdAt ?? now,
     updatedAt: now,
   }
@@ -121,5 +145,28 @@ export function appendMealPlans(
   return sortMealPlans([
     ...mealPlans.map((mealPlan) => ({ ...mealPlan })),
     ...newMealPlans.map((mealPlan) => ({ ...mealPlan })),
+  ])
+}
+
+export function replaceMealPlansBySlot(
+  mealPlans: PlannedMeal[],
+  replacementMealPlans: PlannedMeal[],
+): PlannedMeal[] {
+  const replacementIds = new Set(
+    replacementMealPlans.map(
+      (mealPlan) => mealPlan.id,
+    ),
+  )
+
+  return sortMealPlans([
+    ...mealPlans
+      .filter(
+        (mealPlan) =>
+          !replacementIds.has(mealPlan.id),
+      )
+      .map((mealPlan) => ({ ...mealPlan })),
+    ...replacementMealPlans.map((mealPlan) => ({
+      ...mealPlan,
+    })),
   ])
 }

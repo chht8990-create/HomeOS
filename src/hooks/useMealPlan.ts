@@ -3,6 +3,7 @@ import {
   appendMealPlans,
   parseMealPlans,
   removeMealPlan,
+  replaceMealPlansBySlot,
   upsertMealPlan,
   type MealPlanInput,
 } from '../services/mealPlanEngine'
@@ -163,11 +164,73 @@ function useMealPlan() {
     })
   }
 
+  function replaceAllMealPlans(
+    nextMealPlans: PlannedMeal[],
+  ) {
+    const previousMealPlans = readMealPlans()
+
+    previousMealPlans.forEach((mealPlan) => {
+      window.dispatchEvent(
+        new CustomEvent('homeos:meal-cleared', {
+          detail: {
+            sourceId:
+              createPlannerShoppingSourceId(
+                mealPlan.id,
+              ),
+          },
+        }),
+      )
+    })
+
+    saveMealPlans(
+      nextMealPlans.map((mealPlan) => ({
+        ...mealPlan,
+      })),
+    )
+  }
+
+  function replaceMealPlanSlots(
+    replacementMealPlans: PlannedMeal[],
+  ) {
+    const currentMealPlans = readMealPlans()
+    const replacementIds = new Set(
+      replacementMealPlans.map(
+        (mealPlan) => mealPlan.id,
+      ),
+    )
+
+    currentMealPlans
+      .filter((mealPlan) =>
+        replacementIds.has(mealPlan.id),
+      )
+      .forEach((mealPlan) => {
+        window.dispatchEvent(
+          new CustomEvent('homeos:meal-cleared', {
+            detail: {
+              sourceId:
+                createPlannerShoppingSourceId(
+                  mealPlan.id,
+                ),
+            },
+          }),
+        )
+      })
+
+    saveMealPlans(
+      replaceMealPlansBySlot(
+        currentMealPlans,
+        replacementMealPlans,
+      ),
+    )
+  }
+
   return {
     mealPlans,
     saveMealPlan,
     deleteMealPlan,
     importMealPlans,
+    replaceAllMealPlans,
+    replaceMealPlanSlots,
   }
 }
 

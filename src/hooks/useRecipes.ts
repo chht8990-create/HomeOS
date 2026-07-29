@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
 import { recipes as builtInRecipes } from '../data/recipes'
 import { parseRecipeCollection } from '../services/mealPackEngine'
+import {
+  AI_MEAL_PLAN_TRIAL_CHANGE_EVENT,
+  AI_MEAL_PLAN_TRIAL_STORAGE_KEY,
+  parseStoredAiMealPlanTrial,
+} from '../services/aiMealPlanTrialEngine'
 import type { Recipe } from '../types/recipe'
 
 const STORAGE_KEY = 'homeos.recipes.imported'
@@ -37,18 +42,51 @@ function readImportedRecipes(): Recipe[] {
   }
 }
 
+function readAiMealPlanTrialRecipes(): Recipe[] {
+  const storedValue = window.localStorage.getItem(
+    AI_MEAL_PLAN_TRIAL_STORAGE_KEY,
+  )
+
+  if (!storedValue) {
+    return []
+  }
+
+  try {
+    return (
+      parseStoredAiMealPlanTrial(
+        JSON.parse(storedValue),
+      )?.response.recipes ?? []
+    )
+  } catch {
+    return []
+  }
+}
+
 function useRecipes() {
   const [importedRecipes, setImportedRecipes] =
     useState<Recipe[]>(readImportedRecipes)
+  const [
+    aiMealPlanTrialRecipes,
+    setAiMealPlanTrialRecipes,
+  ] = useState<Recipe[]>(
+    readAiMealPlanTrialRecipes,
+  )
 
   useEffect(() => {
     function reloadRecipes() {
       setImportedRecipes(readImportedRecipes())
+      setAiMealPlanTrialRecipes(
+        readAiMealPlanTrialRecipes(),
+      )
     }
 
     window.addEventListener('storage', reloadRecipes)
     window.addEventListener(
       CHANGE_EVENT,
+      reloadRecipes,
+    )
+    window.addEventListener(
+      AI_MEAL_PLAN_TRIAL_CHANGE_EVENT,
       reloadRecipes,
     )
 
@@ -59,6 +97,10 @@ function useRecipes() {
       )
       window.removeEventListener(
         CHANGE_EVENT,
+        reloadRecipes,
+      )
+      window.removeEventListener(
+        AI_MEAL_PLAN_TRIAL_CHANGE_EVENT,
         reloadRecipes,
       )
     }
@@ -82,11 +124,20 @@ function useRecipes() {
     window.dispatchEvent(new Event(CHANGE_EVENT))
   }
 
-  return {
-    recipes: [
+  const allRecipes = [
       ...builtInRecipes,
       ...importedRecipes,
-    ],
+      ...aiMealPlanTrialRecipes,
+    ].filter(
+      (recipe, index, recipes) =>
+        recipes.findIndex(
+          (candidate) =>
+            candidate.id === recipe.id,
+        ) === index,
+    )
+
+  return {
+    recipes: allRecipes,
     importedRecipes,
     addImportedRecipes,
   }

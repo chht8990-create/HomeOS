@@ -95,13 +95,25 @@ function getPresentation(
   recipe: Recipe,
   index: number,
 ): RecipePresentation {
+  const totalMinutes =
+    typeof recipe.prepMinutes === 'number' &&
+    typeof recipe.cookMinutes === 'number'
+      ? recipe.prepMinutes + recipe.cookMinutes
+      : null
+
   return (
     recipePresentations[recipe.id] ?? {
-      kicker: '새로 추가한 레시피',
+      kicker: '오늘의 집밥',
       description:
-        '가져온 재료로 천천히 완성해 보는 새로운 메뉴예요.',
-      duration: '30분',
-      difficulty: '보통',
+        '준비한 재료의 맛을 살려 차근차근 완성하는 메뉴예요.',
+      duration:
+        totalMinutes === null
+          ? '시간 정보 없음'
+          : `${totalMinutes}분`,
+      difficulty:
+        totalMinutes !== null && totalMinutes <= 25
+          ? '쉬움'
+          : '보통',
       tone:
         fallbackTones[index % fallbackTones.length],
     }
@@ -176,7 +188,7 @@ function RecipePhoto({
             aria-hidden="true"
           />
           <span className="recipe-photo__label">
-            새로 추가한 메뉴
+            오늘의 집밥
           </span>
         </>
       )}
@@ -322,12 +334,25 @@ function RecipePage({
 
               <div className="recipe-meta">
                 <span>
-                  <small>조리 시간</small>
-                  <strong>{presentation.duration}</strong>
+                  <small>준비 · 조리</small>
+                  <strong>
+                    {selectedRecipe.prepMinutes ??
+                      0}
+                    분 ·{' '}
+                    {selectedRecipe.cookMinutes ??
+                      Number.parseInt(
+                        presentation.duration,
+                        10,
+                      )}
+                    분
+                  </strong>
                 </span>
                 <span>
-                  <small>난이도</small>
-                  <strong>{presentation.difficulty}</strong>
+                  <small>기준 인분</small>
+                  <strong>
+                    {selectedRecipe.servings ?? 2}
+                    인분
+                  </strong>
                 </span>
                 <span>
                   <small>재료</small>
@@ -418,6 +443,45 @@ function RecipePage({
                   )
                 })}
               </ul>
+
+              {selectedRecipe.optionalIngredients &&
+              selectedRecipe.optionalIngredients.length >
+                0 ? (
+                <div className="recipe-detail-extra">
+                  <strong>선택 재료</strong>
+                  <p>
+                    {selectedRecipe.optionalIngredients
+                      .map(
+                        (ingredient) =>
+                          `${ingredient.name} ${ingredient.quantity}${ingredient.unit}`,
+                      )
+                      .join(', ')}
+                  </p>
+                </div>
+              ) : null}
+
+              {selectedRecipe.substitutions &&
+              selectedRecipe.substitutions.length > 0 ? (
+                <div className="recipe-detail-extra">
+                  <strong>대체할 수 있어요</strong>
+                  <ul>
+                    {selectedRecipe.substitutions.map(
+                      (substitution) => (
+                        <li
+                          key={
+                            substitution.ingredientName
+                          }
+                        >
+                          {substitution.ingredientName}:{' '}
+                          {substitution.alternatives.join(
+                            ', ',
+                          )}
+                        </li>
+                      ),
+                    )}
+                  </ul>
+                </div>
+              ) : null}
             </section>
 
             <section
@@ -427,52 +491,50 @@ function RecipePage({
               <div className="recipe-detail-section__heading">
                 <div>
                   <p className="recipe-kicker">
-                    조리 전 확인
+                    메뉴별 상세 안내
                   </p>
                   <h2 id="recipe-steps-title">
-                    기본 조리 안내
+                    {selectedRecipe.steps?.length
+                      ? '조리 순서'
+                      : '조리 순서가 없어요'}
                   </h2>
                 </div>
               </div>
 
               <p className="recipe-guide-note">
-                메뉴별 상세 조리법이 아닌 기본 안내예요.
-                실제 순서와 시간은 재료 상태에 따라 달라질 수
-                있어요.
+                {selectedRecipe.steps?.length
+                  ? '단계별 불 세기와 완성 상태를 함께 확인해 주세요. 재료 상태에 따라 시간은 조금 달라질 수 있어요.'
+                  : '가져온 레시피에 상세 조리 순서가 없어 실제 조리법으로 표시하지 않아요.'}
               </p>
 
-              <ol className="recipe-step-list">
-                <li>
-                  <span>01</span>
-                  <div>
-                    <strong>재료를 준비해요</strong>
-                    <p>
-                      모든 재료를 먹기 좋은 크기로 손질해
-                      한곳에 모아두세요.
-                    </p>
-                  </div>
-                </li>
-                <li>
-                  <span>02</span>
-                  <div>
-                    <strong>차근차근 익혀요</strong>
-                    <p>
-                      단단한 재료부터 넣고 향이 충분히
-                      어우러지도록 익혀 주세요.
-                    </p>
-                  </div>
-                </li>
-                <li>
-                  <span>03</span>
-                  <div>
-                    <strong>따뜻하게 완성해요</strong>
-                    <p>
-                      마지막으로 간을 맞추고 가장 맛있는
-                      온도에 바로 담아내요.
-                    </p>
-                  </div>
-                </li>
-              </ol>
+              {selectedRecipe.steps?.length ? (
+                <ol className="recipe-step-list">
+                  {selectedRecipe.steps.map((step) => (
+                    <li key={step.order}>
+                      <span>
+                        {String(step.order).padStart(
+                          2,
+                          '0',
+                        )}
+                      </span>
+                      <div>
+                        <strong>
+                          {step.minutes}분
+                          {step.heat
+                            ? ` · ${step.heat}`
+                            : ''}
+                        </strong>
+                        <p>{step.instruction}</p>
+                        {step.doneness ? (
+                          <small>
+                            완성 기준: {step.doneness}
+                          </small>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              ) : null}
             </section>
           </div>
 

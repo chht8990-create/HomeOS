@@ -5,10 +5,13 @@ import {
 } from 'react'
 import './App.css'
 import BrandSplash from './components/BrandSplash'
+import MealPlanWelcomeDialog from './components/MealPlanWelcomeDialog'
 import BottomNavigation, {
   type PageName,
 } from './components/BottomNavigation'
 import useShoppingList from './hooks/useShoppingList'
+import useMealPlan from './hooks/useMealPlan'
+import useRecipes from './hooks/useRecipes'
 import InventoryPage from './pages/InventoryPage'
 import HomePage from './pages/HomePage'
 import MealPlanPage from './pages/MealPlanPage'
@@ -16,6 +19,49 @@ import RecipePage from './pages/RecipePage'
 import SettingsPage from './pages/SettingsPage'
 import ShoppingPage from './pages/ShoppingPage'
 import type { Ingredient } from './types/ingredient'
+import { createDefaultMonthlyMealPlans } from './services/defaultMealPlanEngine'
+
+const MEAL_PLAN_WELCOME_STORAGE_KEY =
+  'today-table.mealPlanWelcome.v1'
+
+function getTodayDateKey() {
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = String(
+    today.getMonth() + 1,
+  ).padStart(2, '0')
+  const day = String(today.getDate()).padStart(
+    2,
+    '0',
+  )
+
+  return `${year}-${month}-${day}`
+}
+
+function shouldShowMealPlanWelcome() {
+  if (
+    window.localStorage.getItem(
+      MEAL_PLAN_WELCOME_STORAGE_KEY,
+    )
+  ) {
+    return false
+  }
+
+  try {
+    const storedMealPlans = JSON.parse(
+      window.localStorage.getItem(
+        'homeos.mealPlan.items',
+      ) ?? '[]',
+    )
+
+    return (
+      Array.isArray(storedMealPlans) &&
+      storedMealPlans.length === 0
+    )
+  } catch {
+    return true
+  }
+}
 
 type RecipeMatchedEventDetail = {
   sourceId: string
@@ -35,6 +81,12 @@ function App() {
     useState<string | null>(null)
   const [plannerRecipeName, setPlannerRecipeName] =
     useState<string | null>(null)
+  const [openAiTrial, setOpenAiTrial] =
+    useState(false)
+  const [
+    isMealPlanWelcomeOpen,
+    setIsMealPlanWelcomeOpen,
+  ] = useState(shouldShowMealPlanWelcome)
   const pageContainerRef =
     useRef<HTMLDivElement>(null)
   const previousPageRef = useRef(currentPage)
@@ -43,6 +95,11 @@ function App() {
     addMealItems,
     removeMealItems,
   } = useShoppingList()
+  const {
+    mealPlans,
+    replaceAllMealPlans,
+  } = useMealPlan()
+  const { recipes } = useRecipes()
 
   useEffect(() => {
     if (previousPageRef.current === currentPage) {
@@ -117,6 +174,7 @@ function App() {
   function navigateToPage(page: PageName) {
     setRecipeEntryId(null)
     setPlannerRecipeName(null)
+    setOpenAiTrial(false)
     setCurrentPage(page)
   }
 
@@ -132,6 +190,35 @@ function App() {
     setCurrentPage('mealPlan')
   }
 
+  function closeMealPlanWelcome() {
+    window.localStorage.setItem(
+      MEAL_PLAN_WELCOME_STORAGE_KEY,
+      'seen',
+    )
+    setIsMealPlanWelcomeOpen(false)
+  }
+
+  function startDefaultMealPlan() {
+    if (mealPlans.length === 0) {
+      replaceAllMealPlans(
+        createDefaultMonthlyMealPlans(
+          getTodayDateKey(),
+          recipes,
+        ),
+      )
+    }
+
+    closeMealPlanWelcome()
+    setOpenAiTrial(false)
+    setCurrentPage('mealPlan')
+  }
+
+  function startAiMealPlanTrial() {
+    closeMealPlanWelcome()
+    setOpenAiTrial(true)
+    setCurrentPage('mealPlan')
+  }
+
   function renderPage() {
     switch (currentPage) {
       case 'mealPlan':
@@ -142,6 +229,7 @@ function App() {
             }
             onChangePage={navigateToPage}
             onOpenRecipeDetail={openRecipeDetail}
+            openAiTrial={openAiTrial}
           />
         )
 
@@ -217,6 +305,13 @@ function App() {
             : currentPage
         }
         onChangePage={navigateToPage}
+      />
+
+      <MealPlanWelcomeDialog
+        open={isMealPlanWelcomeOpen}
+        onClose={closeMealPlanWelcome}
+        onStartDefaultPlan={startDefaultMealPlan}
+        onStartAiTrial={startAiMealPlanTrial}
       />
     </div>
   )

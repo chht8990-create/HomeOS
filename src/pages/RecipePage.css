@@ -901,3 +901,31 @@
   width: auto;
   margin-top: var(--space-4);
 }
+.recipe-detail-extra {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: var(--radius-input);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-caption);
+}
+
+.recipe-detail-extra strong {
+  color: var(--color-text);
+}
+
+.recipe-detail-extra ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.recipe-step-list small {
+  display: block;
+  margin-top: 6px;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}

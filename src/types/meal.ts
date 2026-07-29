@@ -16,6 +16,9 @@ export type Meal = {
 export type PlannedMeal = Meal & {
   status: 'planned'
   name: string
+  recipeId?: string
+  servings?: number
+  source?: 'manual' | 'default' | 'ai-trial'
 }
 
 export type SkippedMeal = Meal & {

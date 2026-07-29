@@ -148,6 +148,31 @@ function useShoppingList() {
     )
   }
 
+  function replaceMealPlanRangeItems(
+    sourceId: string,
+    ingredients: Ingredient[],
+  ) {
+    const currentItems = readItems()
+    const itemsWithoutMealPlanRanges =
+      currentItems.filter(
+        (item) =>
+          !item.sourceId?.startsWith(
+            'meal-plan-range:',
+          ),
+      )
+    const generatedItems = createMealShoppingItems(
+      sourceId,
+      ingredients,
+    )
+
+    saveItems([
+      ...itemsWithoutMealPlanRanges,
+      ...generatedItems,
+    ])
+
+    return generatedItems.length
+  }
+
   function setItemsCompleted(
     itemIds: string[],
     completed: boolean,
@@ -225,6 +250,7 @@ function useShoppingList() {
     addIngredientItems,
     addMealItems,
     removeMealItems,
+    replaceMealPlanRangeItems,
     setItemsCompleted,
     deleteItems,
     clearCompletedItems,

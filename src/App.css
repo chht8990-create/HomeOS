@@ -368,6 +368,154 @@ button {
   outline: none;
 }
 
+.meal-plan-welcome {
+  display: grid;
+  gap: var(--space-3);
+  color: var(--color-text-muted);
+}
+
+.meal-plan-welcome__icon {
+  display: grid;
+  width: 60px;
+  height: 60px;
+  place-items: center;
+  border-radius: var(--radius-card);
+  background: var(--color-primary-subtle);
+  color: var(--color-primary);
+}
+
+.meal-plan-welcome__note {
+  padding: var(--space-3);
+  border-radius: var(--radius-input);
+  background: var(--color-surface-sunken);
+  color: var(--color-text);
+  font-size: var(--font-size-caption);
+}
+
+.meal-plan-welcome__actions {
+  display: grid;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.meal-plan-toolbar,
+.meal-plan-shopping,
+.ai-trial-complete {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.meal-plan-range-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.meal-plan-range-tabs .ui-button {
+  min-width: 0;
+  padding-inline: var(--space-2);
+}
+
+.meal-plan-date-navigation {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.meal-plan-date-navigation input {
+  width: 100%;
+  min-width: 0;
+}
+
+.meal-plan-maintenance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.meal-plan-shopping > p,
+.ai-trial-form__notice {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-caption);
+  line-height: 1.55;
+}
+
+.ai-trial-checkbox {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ai-trial-checkbox input {
+  width: 22px;
+  height: 22px;
+}
+
+.ai-trial-form .meal-editor__actions {
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(180px, 100%), 1fr)
+  );
+}
+
+.ai-trial-complete h3 {
+  margin: 0;
+  color: var(--color-text);
+}
+
+.ai-trial-complete > p {
+  color: var(--color-text-muted);
+}
+
+.ai-trial-shopping-summary {
+  padding: var(--space-3);
+  border-radius: var(--radius-input);
+  background: var(--color-primary-subtle);
+}
+
+.ai-trial-shopping-summary p {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-caption);
+  line-height: 1.55;
+}
+
+.ai-trial-complete ul {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ai-trial-complete li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-input);
+  background: var(--color-surface-sunken);
+}
+
+@media (max-width: 430px) {
+  .meal-plan-range-tabs {
+    gap: 4px;
+  }
+
+  .meal-plan-range-tabs .ui-button {
+    font-size: 12px;
+  }
+
+  .meal-plan-maintenance-actions {
+    display: grid;
+  }
+}
+
 @media (min-width: 768px) {
   .app.app--utility {
     max-width: 880px;

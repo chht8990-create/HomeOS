@@ -45,6 +45,33 @@ try {
   } = await vite.ssrLoadModule(
     '/api/ai/recipe-recommendation.ts',
   )
+  const { recipes: builtInRecipes } =
+    await vite.ssrLoadModule(
+      '/src/data/recipes.ts',
+    )
+  const {
+    createDefaultMonthlyMealPlans,
+    getMealPlansInRange,
+    isDetailedRecipe,
+  } = await vite.ssrLoadModule(
+    '/src/services/defaultMealPlanEngine.ts',
+  )
+  const {
+    createMealPlanShoppingIngredients,
+  } = await vite.ssrLoadModule(
+    '/src/services/mealPlanShoppingEngine.ts',
+  )
+  const {
+    parseAiMealPlanTrialOutput,
+    parseStoredAiMealPlanTrial,
+    validateAiMealPlanTrialRequest,
+  } = await vite.ssrLoadModule(
+    '/src/services/aiMealPlanTrialEngine.ts',
+  )
+  const { handleAiMealPlanTrial } =
+    await vite.ssrLoadModule(
+      '/api/ai/meal-plan-trial.ts',
+    )
 
   const recipe = {
     id: 'recipe-test-stew',
@@ -504,6 +531,475 @@ try {
 
       assert.equal(response.status, 200)
       assert.equal(parsed?.length, 3)
+    },
+  )
+
+  await check(
+    '기본 식단: 30일 모두 상세 Recipe ID에 연결되고 공통 placeholder가 없음',
+    () => {
+      const plans = createDefaultMonthlyMealPlans(
+        '2026-08-01',
+        builtInRecipes,
+        '2026-08-01T00:00:00.000Z',
+      )
+      const recipeById = new Map(
+        builtInRecipes.map((item) => [
+          item.id,
+          item,
+        ]),
+      )
+      const allIngredientIds = builtInRecipes.flatMap(
+        (recipe) => [
+          ...recipe.ingredients,
+          ...recipe.optionalIngredients,
+        ],
+      ).map((ingredient) => ingredient.id)
+
+      assert.equal(plans.length, 30)
+      assert.equal(
+        recipeById.size,
+        builtInRecipes.length,
+      )
+      assert.equal(
+        new Set(allIngredientIds).size,
+        allIngredientIds.length,
+      )
+      assert.equal(
+        new Set(plans.map((plan) => plan.id)).size,
+        30,
+      )
+      assert.equal(
+        new Set(
+          plans.map((plan) => plan.recipeId),
+        ).size >= 20,
+        true,
+      )
+      const useCounts = plans.reduce(
+        (counts, plan) => {
+          counts.set(
+            plan.recipeId,
+            (counts.get(plan.recipeId) ?? 0) + 1,
+          )
+          return counts
+        },
+        new Map(),
+      )
+      assert.equal(
+        [...useCounts.values()].every(
+          (count) => count <= 2,
+        ),
+        true,
+      )
+      assert.equal(
+        plans.every((plan) => {
+          const connectedRecipe = recipeById.get(
+            plan.recipeId,
+          )
+
+          return (
+            connectedRecipe &&
+            isDetailedRecipe(connectedRecipe) &&
+            connectedRecipe.steps.length >= 5 &&
+            connectedRecipe.steps.length <= 10
+          )
+        }),
+        true,
+      )
+      assert.equal(
+        plans.some(
+          (plan, index) =>
+            index > 0 &&
+            plan.name === plans[index - 1].name,
+        ),
+        false,
+      )
+      assert.equal(
+        plans.some(
+          (plan) => plan.name === '김치찌개',
+        ),
+        true,
+      )
+      const newRecipeIds = [
+        'japchae',
+        'chicken-soup',
+        'salmon-soy-grill',
+        'vegetable-bibimbap',
+        'squid-radish-soup',
+        'steamed-egg',
+        'andong-jjimdak',
+        'potato-pancake',
+        'tofu-mushroom-rice',
+        'boiled-pork',
+      ]
+      assert.equal(
+        newRecipeIds.every((recipeId) => {
+          const recipe = recipeById.get(recipeId)
+
+          return (
+            recipe &&
+            recipe.servings > 0 &&
+            recipe.prepMinutes >= 0 &&
+            recipe.cookMinutes > 0 &&
+            recipe.ingredients.every(
+              (ingredient) =>
+                ingredient.quantity > 0 &&
+                ingredient.unit.trim().length > 0,
+            ) &&
+            recipe.optionalIngredients.length > 0 &&
+            recipe.substitutions.length > 0 &&
+            recipe.steps.length >= 5 &&
+            recipe.steps.every(
+              (recipeStep) =>
+                recipeStep.minutes > 0 &&
+                Boolean(recipeStep.heat?.trim()) &&
+                Boolean(recipeStep.doneness?.trim()),
+            )
+          )
+        }),
+        true,
+      )
+      assert.equal(
+        /기본 조리 안내|공통 placeholder|상세 조리법 준비 중/.test(
+          JSON.stringify(builtInRecipes),
+        ),
+        false,
+      )
+      const menuGroups = new Map([
+        ['kimchi-stew', '찌개'],
+        ['grilled-mackerel', '생선'],
+        ['egg-fried-rice', '밥'],
+        ['chicken-soup', '국'],
+        ['japchae', '면'],
+        ['steamed-egg', '계란'],
+        ['beef-bulgogi', '육류'],
+        ['vegetable-bibimbap', '밥'],
+        ['braised-tofu', '두부'],
+        ['squid-radish-soup', '국'],
+        ['curry', '카레'],
+        ['salmon-soy-grill', '생선'],
+        ['soybean-paste-stew', '찌개'],
+        ['andong-jjimdak', '찜'],
+        ['potato-pancake', '전'],
+        ['beef-seaweed-soup', '국'],
+        ['tofu-mushroom-rice', '밥'],
+        ['spicy-pork', '볶음'],
+        ['boiled-pork', '육류'],
+        ['chicken-galbi', '볶음'],
+      ])
+      assert.equal(
+        plans.some(
+          (plan, index) =>
+            index > 0 &&
+            menuGroups.get(plan.recipeId) ===
+              menuGroups.get(
+                plans[index - 1].recipeId,
+              ),
+        ),
+        false,
+      )
+      assert.equal(
+        plans.some((plan) => plan.name === '카레'),
+        true,
+      )
+      assert.equal(
+        plans.some(
+          (plan) => plan.name === '계란볶음밥',
+        ),
+        true,
+      )
+    },
+  )
+
+  await check(
+    '식단 보기: 오늘·일주일·보름·한 달 범위를 정확히 반환',
+    () => {
+      const plans = createDefaultMonthlyMealPlans(
+        '2026-08-01',
+        builtInRecipes,
+      )
+
+      assert.equal(
+        getMealPlansInRange(
+          plans,
+          '2026-08-01',
+          'today',
+        ).length,
+        1,
+      )
+      assert.equal(
+        getMealPlansInRange(
+          plans,
+          '2026-08-01',
+          'week',
+        ).length,
+        7,
+      )
+      assert.equal(
+        getMealPlansInRange(
+          plans,
+          '2026-08-01',
+          'fortnight',
+        ).length,
+        15,
+      )
+      assert.equal(
+        getMealPlansInRange(
+          plans,
+          '2026-08-01',
+          'month',
+        ).length,
+        30,
+      )
+    },
+  )
+
+  await check(
+    '식단 장보기: 같은 재료 합산·냉장고 차감·기본 조미료 제외',
+    () => {
+      const plans = createDefaultMonthlyMealPlans(
+        '2026-08-01',
+        builtInRecipes,
+      )
+      const result =
+        createMealPlanShoppingIngredients(
+          plans,
+          builtInRecipes,
+          [
+            {
+              id: 'inventory-onion',
+              name: '양파',
+              quantity: 2,
+              unit: '개',
+              location: 'fridge',
+              createdAt:
+                '2026-08-01T00:00:00.000Z',
+              updatedAt:
+                '2026-08-01T00:00:00.000Z',
+            },
+          ],
+          '2026-08-01',
+          'week',
+        )
+      const onion = result.ingredients.find(
+        (ingredient) =>
+          ingredient.name === '양파' &&
+          ingredient.unit === '개',
+      )
+      const resultWithoutInventory =
+        createMealPlanShoppingIngredients(
+          plans,
+          builtInRecipes,
+          [],
+          '2026-08-01',
+          'week',
+        )
+      const onionWithoutInventory =
+        resultWithoutInventory.ingredients.find(
+          (ingredient) =>
+            ingredient.name === '양파' &&
+            ingredient.unit === '개',
+        )
+
+      assert.equal(result.selectedMealPlans.length, 7)
+      assert.equal(
+        onion?.quantity,
+        (onionWithoutInventory?.quantity ?? 0) - 2,
+      )
+      assert.equal(
+        result.ingredients.some((ingredient) =>
+          ['물', '소금', '식용유', '후추', '설탕'].includes(
+            ingredient.name,
+          ),
+        ),
+        false,
+      )
+    },
+  )
+
+  await check(
+    'AI 7일 체험: 정상 요청과 7개 상세 레시피 응답을 검증',
+    () => {
+      const request = {
+        startDate: '2026-08-01',
+        householdSize: 4,
+        includesChildren: true,
+        childAgeGroup: '초등학생',
+        spicePreference: 'mild',
+        excludedFoods: '땅콩',
+        allergies: '새우',
+        weekdayMaxMinutes: 40,
+        inventoryItems: [
+          {
+            name: '계란',
+            quantity: 4,
+            unit: '개',
+          },
+        ],
+      }
+      const validation =
+        validateAiMealPlanTrialRequest(request)
+
+      assert.equal(validation.ok, true)
+
+      if (!validation.ok) {
+        return
+      }
+
+      const output = {
+        days: Array.from(
+          { length: 7 },
+          (_, index) => ({
+            day: index + 1,
+            recipe: {
+              name: `가정식 메뉴 ${index + 1}`,
+              servings: 4,
+              prepMinutes: 10,
+              cookMinutes: 25,
+              ingredients: [
+                {
+                  name: '계란',
+                  quantity: 2,
+                  unit: '개',
+                },
+                {
+                  name: `채소 ${index + 1}`,
+                  quantity: 1,
+                  unit: '개',
+                },
+              ],
+              optionalIngredients: [],
+              substitutions: [
+                {
+                  ingredientName: `채소 ${index + 1}`,
+                  alternatives: ['버섯 100g'],
+                },
+              ],
+              steps: Array.from(
+                { length: 5 },
+                (_, stepIndex) => ({
+                  order: stepIndex + 1,
+                  instruction: `${stepIndex + 1}단계 조리`,
+                  minutes: 5,
+                  heat: '중불',
+                  doneness: '속까지 충분히 익어요.',
+                }),
+              ),
+            },
+          }),
+        ),
+      }
+      const parsed = parseAiMealPlanTrialOutput(
+        output,
+        validation.data,
+      )
+
+      assert.equal(parsed?.recipes.length, 7)
+      assert.equal(parsed?.plans.length, 7)
+      assert.equal(
+        parsed?.weeklyShoppingIngredients.length,
+        8,
+      )
+      assert.equal(
+        parsed?.plans.every(
+          (plan) =>
+            plan.source === 'ai-trial' &&
+            Boolean(plan.recipeId),
+        ),
+        true,
+      )
+      assert.equal(
+        parseStoredAiMealPlanTrial({
+          formatVersion: '1',
+          usedAt:
+            '2026-08-01T00:00:00.000Z',
+          response: parsed,
+        })?.response.plans.length,
+        7,
+      )
+      assert.equal(
+        parseStoredAiMealPlanTrial({
+          formatVersion: '1',
+          usedAt:
+            '2026-08-01T00:00:00.000Z',
+          response: {
+            plans: [],
+            recipes: [],
+            weeklyShoppingIngredients: [],
+            meta: {
+              generatedAt:
+                '2026-08-01T00:00:00.000Z',
+            },
+          },
+        }),
+        null,
+      )
+    },
+  )
+
+  await check(
+    'AI 7일 체험 endpoint: API Key 미설정 시 체험 차감 없는 설정 오류',
+    async () => {
+      const response = await handleAiMealPlanTrial(
+        new Request(
+          'http://localhost/api/ai/meal-plan-trial',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              startDate: '2026-08-01',
+              householdSize: 4,
+              includesChildren: false,
+              spicePreference: 'mild',
+              weekdayMaxMinutes: 40,
+              inventoryItems: [],
+            }),
+          },
+        ),
+        {
+          NODE_ENV: 'production',
+        },
+      )
+      const body = await response.json()
+
+      assert.equal(response.status, 503)
+      assert.equal(body.code, 'AI_NOT_CONFIGURED')
+    },
+  )
+
+  await check(
+    'AI 7일 체험 endpoint: 개발 Mock도 저장 가능한 7일 결과를 반환',
+    async () => {
+      const response = await handleAiMealPlanTrial(
+        new Request(
+          'http://localhost/api/ai/meal-plan-trial',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              startDate: '2026-08-01',
+              householdSize: 4,
+              includesChildren: false,
+              spicePreference: 'mild',
+              weekdayMaxMinutes: 40,
+              inventoryItems: [],
+            }),
+          },
+        ),
+        {
+          NODE_ENV: 'development',
+          HOMEOS_AI_MOCK: 'true',
+        },
+      )
+      const body = await response.json()
+
+      assert.equal(response.status, 200)
+      assert.equal(body.plans.length, 7)
+      assert.equal(body.recipes.length, 7)
+      assert.equal(body.meta.model, 'mock')
     },
   )
 } finally {
