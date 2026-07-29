@@ -4,6 +4,7 @@ import type {
   AiRecipeIngredient,
   AiRecipeRecommendation,
   AiRecipeRecommendationRequest,
+  AiRecipeStep,
 } from '../types/aiRecipeRecommendation.js'
 
 export const AI_MAX_INVENTORY_ITEMS = 40
@@ -57,6 +58,16 @@ function readText(
     : null
 }
 
+function readNullableText(
+  value: unknown,
+  maximumLength: number,
+) {
+  return value === null
+    ? null
+    : (readText(value, maximumLength) ??
+        undefined)
+}
+
 function readPositiveNumber(value: unknown) {
   return typeof value === 'number' &&
     Number.isFinite(value) &&
@@ -104,16 +115,96 @@ function readRecipeIngredient(
   const name = readText(value.name, 80)
   const quantity = readPositiveNumber(value.quantity)
   const unit = readText(value.unit, 30)
+  const group =
+    value.group === 'main' ||
+    value.group === 'seasoning' ||
+    value.group === 'broth' ||
+    value.group === 'garnish' ||
+    value.group === 'optional'
+      ? value.group
+      : null
+  const note = readNullableText(value.note, 120)
+  const substitute = readArray(
+    value.substitute,
+    4,
+    (item) => readText(item, 80),
+  )
 
   return name &&
     quantity !== null &&
     unit &&
-    typeof value.available === 'boolean'
+    typeof value.available === 'boolean' &&
+    group &&
+    note !== undefined &&
+    typeof value.optional === 'boolean' &&
+    substitute
     ? {
         name,
         quantity,
         unit,
         available: value.available,
+        group,
+        note,
+        optional: value.optional,
+        substitute,
+      }
+    : null
+}
+
+function readRecipeStep(
+  value: unknown,
+): AiRecipeStep | null {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  const order = readInteger(value.order, 1, 12)
+  const title = readText(value.title, 80)
+  const instruction = readText(
+    value.instruction,
+    400,
+  )
+  const durationMinutes = readInteger(
+    value.durationMinutes,
+    1,
+    180,
+  )
+  const heatLevel = readText(value.heatLevel, 40)
+  const completionCue = readText(
+    value.completionCue,
+    180,
+  )
+  const reason = readNullableText(value.reason, 180)
+  const warning = readNullableText(
+    value.warning,
+    180,
+  )
+  const ingredientRefs = readArray(
+    value.ingredientRefs,
+    AI_MAX_INVENTORY_ITEMS,
+    (item) => readText(item, 80),
+  )
+
+  return order !== null &&
+    title &&
+    instruction &&
+    durationMinutes !== null &&
+    heatLevel &&
+    completionCue &&
+    reason !== undefined &&
+    warning !== undefined &&
+    ingredientRefs &&
+    ingredientRefs.length > 0
+    ? {
+        order,
+        title,
+        instruction,
+        durationMinutes,
+        heatLevel,
+        completionCue,
+        reason,
+        warning,
+        ingredientRefs,
       }
     : null
 }
@@ -170,6 +261,26 @@ function readRecommendation(
     AI_MIN_ESTIMATED_MINUTES,
     AI_MAX_ESTIMATED_MINUTES,
   )
+  const difficulty =
+    value.difficulty === '쉬움' ||
+    value.difficulty === '보통' ||
+    value.difficulty === '어려움'
+      ? value.difficulty
+      : null
+  const prepTimeMinutes = readInteger(
+    value.prepTimeMinutes,
+    0,
+    120,
+  )
+  const cookTimeMinutes = readInteger(
+    value.cookTimeMinutes,
+    5,
+    180,
+  )
+  const calories =
+    value.calories === null
+      ? null
+      : readInteger(value.calories, 1, 5000)
   const ingredients = readArray(
     value.ingredients,
     AI_MAX_INVENTORY_ITEMS,
@@ -183,7 +294,29 @@ function readRecommendation(
   const steps = readArray(
     value.steps,
     12,
-    (step) => readText(step, 300),
+    readRecipeStep,
+  )
+  const seasoningAdjustment = readArray(
+    value.seasoningAdjustment,
+    4,
+    (item) => readText(item, 180),
+  )
+  const commonMistakes = readArray(
+    value.commonMistakes,
+    4,
+    (item) => readText(item, 180),
+  )
+  const storage = readText(value.storage, 240)
+  const reheating = readText(value.reheating, 240)
+  const leftoverIdeas = readArray(
+    value.leftoverIdeas,
+    4,
+    (item) => readText(item, 180),
+  )
+  const servingSuggestions = readArray(
+    value.servingSuggestions,
+    4,
+    (item) => readText(item, 180),
   )
 
   if (
@@ -191,11 +324,49 @@ function readRecommendation(
     !summary ||
     servings === null ||
     estimatedMinutes === null ||
+    !difficulty ||
+    prepTimeMinutes === null ||
+    cookTimeMinutes === null ||
+    calories === undefined ||
     !ingredients ||
     ingredients.length === 0 ||
     !missingIngredients ||
     !steps ||
-    steps.length === 0
+    steps.length < 8 ||
+    !seasoningAdjustment ||
+    seasoningAdjustment.length === 0 ||
+    !commonMistakes ||
+    commonMistakes.length === 0 ||
+    !storage ||
+    !reheating ||
+    !leftoverIdeas ||
+    leftoverIdeas.length === 0 ||
+    !servingSuggestions ||
+    servingSuggestions.length === 0
+  ) {
+    return null
+  }
+
+  const ingredientNames = new Set(
+    ingredients.map((ingredient) =>
+      ingredient.name.trim().toLowerCase(),
+    ),
+  )
+
+  if (
+    steps.some((step) =>
+      step.ingredientRefs.some(
+        (ingredientName) =>
+          !ingredientNames.has(
+            ingredientName.trim().toLowerCase(),
+          ),
+      ),
+    ) ||
+    ingredients.some(
+      (ingredient) =>
+        /^(물|.*육수)$/.test(ingredient.name) &&
+        ingredient.unit !== 'ml',
+    )
   ) {
     return null
   }
@@ -205,9 +376,19 @@ function readRecommendation(
     summary,
     servings,
     estimatedMinutes,
+    difficulty,
+    prepTimeMinutes,
+    cookTimeMinutes,
+    calories,
     ingredients,
     missingIngredients,
     steps,
+    seasoningAdjustment,
+    commonMistakes,
+    storage,
+    reheating,
+    leftoverIdeas,
+    servingSuggestions,
   }
 }
 
@@ -393,6 +574,10 @@ export function normalizeAiRecipeRecommendations(
             name,
             quantity: ingredient.quantity,
             unit,
+            group: ingredient.group,
+            note: ingredient.note,
+            optional: ingredient.optional,
+            substitute: [...ingredient.substitute],
           })
         }
       }
@@ -449,7 +634,24 @@ export function normalizeAiRecipeRecommendations(
           ...recommendation,
           ingredients,
           missingIngredients,
-          steps: [...recommendation.steps],
+          steps: recommendation.steps.map((step) => ({
+            ...step,
+            ingredientRefs: [
+              ...step.ingredientRefs,
+            ],
+          })),
+          seasoningAdjustment: [
+            ...recommendation.seasoningAdjustment,
+          ],
+          commonMistakes: [
+            ...recommendation.commonMistakes,
+          ],
+          leftoverIdeas: [
+            ...recommendation.leftoverIdeas,
+          ],
+          servingSuggestions: [
+            ...recommendation.servingSuggestions,
+          ],
         },
       ]
     })

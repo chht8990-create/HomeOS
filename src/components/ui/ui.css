@@ -1024,6 +1024,57 @@
       var(--motion-ease-standard);
 }
 
+.ui-select-control,
+.ui-date-control {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-width: 0;
+}
+
+.ui-select-control .ui-select {
+  appearance: none;
+  padding-right: calc(var(--space-8) + var(--space-2));
+}
+
+.ui-select-control__icon {
+  position: absolute;
+  top: 50%;
+  right: var(--space-4);
+  color: var(--color-text-muted);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.ui-date-control__icon {
+  position: absolute;
+  top: 50%;
+  left: var(--space-4);
+  z-index: 1;
+  color: var(--color-primary);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.ui-date-control .ui-date-input {
+  min-height: var(--control-height-md);
+  padding-left: calc(var(--space-8) + var(--space-1));
+}
+
+.ui-date-input::-webkit-calendar-picker-indicator {
+  min-width: 24px;
+  min-height: 24px;
+  cursor: pointer;
+  opacity: 0.72;
+}
+
+.ui-field:has(.ui-select:disabled)
+  .ui-select-control__icon,
+.ui-field:has(.ui-date-input:disabled)
+  .ui-date-control__icon {
+  color: var(--color-text-disabled);
+}
+
 .ui-input::placeholder {
   color: var(--color-text-muted);
 }
@@ -1248,6 +1299,29 @@
   animation-name: ui-sheet-enter;
 }
 
+.ui-dialog__drag-area {
+  display: grid;
+  min-height: 24px;
+  place-items: center;
+  touch-action: none;
+  cursor: grab;
+}
+
+.ui-dialog__drag-area:active {
+  cursor: grabbing;
+}
+
+.ui-dialog__drag-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-border-strong);
+}
+
+.ui-dialog--bottom .ui-dialog__header {
+  padding-top: var(--space-2);
+}
+
 .ui-dialog__header {
   display: flex;
   align-items: flex-start;
@@ -1425,6 +1499,259 @@
   height: 28px;
   border-radius: 8px;
   box-shadow: var(--shadow-sm);
+}
+
+.shopping-item__details-button {
+  display: grid;
+  min-height: var(--control-height-touch);
+  min-width: 0;
+  align-content: center;
+  gap: var(--space-1);
+  padding: var(--space-1) 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.shopping-item__details-button:focus-visible {
+  border-radius: var(--radius-sm);
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.shopping-item__details-button:disabled {
+  cursor: default;
+}
+
+.shopping-item__purchase-summary,
+.shopping-item__inventory-state {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-caption);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.shopping-item__inventory-state {
+  color: var(--color-success);
+  font-weight: var(--font-weight-semibold);
+}
+
+.shopping-reminder-section .ui-card {
+  border-color: color-mix(
+    in srgb,
+    var(--color-warning) 30%,
+    var(--color-border)
+  );
+  background: var(--color-warning-subtle);
+}
+
+.shopping-reminder {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  color: var(--color-text);
+}
+
+.shopping-reminder > svg {
+  color: var(--color-warning);
+}
+
+.shopping-reminder ul {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shopping-reminder li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid
+    color-mix(
+      in srgb,
+      var(--color-warning) 18%,
+      var(--color-border)
+    );
+}
+
+.shopping-reminder li:last-child {
+  border-bottom: 0;
+}
+
+.shopping-reminder li > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.shopping-reminder li small {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-caption);
+}
+
+.shopping-reminder__item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.shopping-reminder__item-actions .ui-button {
+  min-height: 40px;
+  padding-inline: var(--space-3);
+  white-space: nowrap;
+}
+
+.shopping-reminder__actions {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.shopping-reminder__actions .ui-button {
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+
+.shopping-inventory-sheet__result {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.shopping-inventory-sheet__result p {
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: 1.55;
+}
+
+.shopping-inventory-sheet__result p:first-child {
+  color: var(--color-success);
+  font-weight: var(--font-weight-semibold);
+}
+
+.shopping-purchase-sheet,
+.shopping-inventory-sheet {
+  display: grid;
+  gap: var(--space-4);
+}
+
+@media (max-width: 430px) {
+  .shopping-reminder li {
+    grid-template-columns: 1fr;
+  }
+
+  .shopping-reminder__item-actions {
+    justify-content: stretch;
+  }
+
+  .shopping-reminder__item-actions .ui-button {
+    flex: 1 1 132px;
+  }
+}
+
+.shopping-purchase-sheet__required {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-input);
+  background: var(--color-primary-subtle);
+}
+
+.shopping-purchase-sheet__required span {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-caption);
+}
+
+.shopping-purchase-sheet__required strong {
+  color: var(--color-primary);
+  font-size: var(--font-size-h3);
+}
+
+.shopping-purchase-sheet__package {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.shopping-purchase-sheet__result {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-sunken);
+}
+
+.shopping-purchase-sheet__result p {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-caption);
+  line-height: 1.5;
+}
+
+.shopping-purchase-sheet__partial-note {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-caption);
+  line-height: 1.5;
+  text-align: center;
+}
+
+.shopping-inventory-sheet > p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-caption);
+}
+
+.shopping-inventory-sheet ul {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shopping-inventory-sheet label {
+  display: flex;
+  min-height: var(--control-height-touch);
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+  cursor: pointer;
+}
+
+.shopping-inventory-sheet input {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--color-primary);
+}
+
+.shopping-inventory-sheet label span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.shopping-inventory-sheet small {
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 390px) {
+  .shopping-purchase-sheet__package {
+    grid-template-columns: 1fr;
+  }
 }
 
 .ui-screen-header__title {
@@ -2382,6 +2709,10 @@
 }
 
 @media (max-width: 430px) {
+  .inventory-form__row {
+    grid-template-columns: 1fr;
+  }
+
   .ai-recommendation-panel {
     margin-inline: calc(var(--space-2) * -1);
     padding: var(--space-4);
@@ -2527,6 +2858,241 @@
   font-size: var(--font-size-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.settings-measurement-card,
+.settings-help-card {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.settings-measurement-card__heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-3);
+  color: var(--color-primary);
+}
+
+.settings-measurement-card__heading p {
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: var(--line-height-body);
+}
+
+.settings-tool-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  padding: 0;
+  border: 0;
+  margin: 0;
+}
+
+.settings-tool-list label {
+  display: flex;
+  min-width: 0;
+  min-height: var(--control-height-touch);
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+  background: var(--color-surface-sunken);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.settings-tool-list input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  accent-color: var(--color-primary);
+}
+
+.guide-page__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.guide-page__card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-3);
+}
+
+.guide-page__icon,
+.first-run-tutorial__icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: var(--radius-card);
+  background: var(--color-primary-subtle);
+  color: var(--color-primary);
+}
+
+.guide-page__card h2,
+.first-run-tutorial__content h3 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--font-size-h3);
+  line-height: var(--line-height-heading);
+}
+
+.guide-page__card p,
+.first-run-tutorial__content p {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  line-height: var(--line-height-body);
+}
+
+.first-run-tutorial__content {
+  display: grid;
+  min-height: 260px;
+  align-content: center;
+  justify-items: center;
+  gap: var(--space-6);
+  text-align: center;
+}
+
+.first-run-tutorial__tools {
+  display: grid;
+  width: min(100%, 360px);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  padding: 0;
+  border: 0;
+  text-align: left;
+}
+
+.first-run-tutorial__tools legend {
+  width: 100%;
+  margin-bottom: var(--space-2);
+  color: var(--color-text);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-bold);
+  text-align: center;
+}
+
+.first-run-tutorial__tools label {
+  display: flex;
+  min-height: var(--control-height-touch);
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-semibold);
+}
+
+.first-run-tutorial__tools input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  accent-color: var(--color-primary);
+}
+
+.first-run-tutorial__icon {
+  width: 76px;
+  height: 76px;
+  border-radius: var(--radius-pill);
+}
+
+.first-run-tutorial__progress {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.first-run-tutorial__progress span {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-border-strong);
+  transition:
+    width var(--motion-duration-base)
+      var(--motion-ease-standard),
+    background var(--motion-duration-base)
+      var(--motion-ease-standard);
+}
+
+.first-run-tutorial__progress span.is-active {
+  width: 24px;
+  background: var(--color-primary);
+}
+
+.first-run-tutorial__footer {
+  display: grid;
+  width: 100%;
+  gap: var(--space-3);
+}
+
+.first-run-tutorial__preference {
+  display: inline-flex;
+  min-height: var(--control-height-touch);
+  align-items: center;
+  gap: var(--space-2);
+  justify-self: start;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-caption);
+  cursor: pointer;
+}
+
+.first-run-tutorial__preference input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--color-primary);
+}
+
+.first-run-tutorial__actions {
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.first-run-tutorial__actions .ui-button,
+.meal-plan-welcome__actions .ui-button {
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  padding-inline: var(--space-4);
+  line-height: 1.2;
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+.first-run-tutorial__start-button {
+  flex: 0 1 auto;
+}
+
+@media (max-width: 430px) {
+  .settings-tool-list,
+  .guide-page__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .first-run-tutorial__content {
+    min-height: 230px;
+  }
+
+  .first-run-tutorial__actions .ui-button {
+    flex: 0 1 auto;
+    padding-inline: var(--space-3);
+    font-size: 14px;
+  }
+
+  .meal-plan-welcome__actions .ui-button {
+    padding-inline: var(--space-3);
+    font-size: 14px;
+  }
 }
 
 .ui-visually-hidden {

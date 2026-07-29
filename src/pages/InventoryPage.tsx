@@ -5,7 +5,9 @@ import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
 import ScreenHeader from '../components/ui/ScreenHeader'
 import Section from '../components/ui/Section'
+import StyledSelect from '../components/ui/StyledSelect'
 import useInventory from '../hooks/useInventory'
+import { getInventoryListDisplayName } from '../services/inventoryPresentationEngine'
 import type {
   InventoryItem,
   InventoryLocation,
@@ -155,19 +157,20 @@ function InventoryPage() {
                 </label>
               </div>
 
-              <label className="inventory-form__field">
-                  <span>보관 위치</span>
-                <select
-                  value={location}
-                  onChange={(event) =>
-                    setLocation(event.target.value as InventoryLocation)
-                  }
-                >
-                  <option value="fridge">냉장</option>
-                  <option value="freezer">냉동</option>
-                  <option value="pantry">실온</option>
-                </select>
-              </label>
+              <StyledSelect
+                label="보관 위치"
+                value={location}
+                onChange={(event) =>
+                  setLocation(
+                    event.target
+                      .value as InventoryLocation,
+                  )
+                }
+              >
+                <option value="fridge">냉장</option>
+                <option value="freezer">냉동</option>
+                <option value="pantry">실온</option>
+              </StyledSelect>
 
               {editingId ? (
                 <div className="meal-editor__actions">
@@ -228,15 +231,14 @@ function InventoryPage() {
                   <li key={item.id} className="inventory-item">
                     <div className="inventory-item__content">
                       <div className="inventory-item__top">
-                        <strong>{item.name}</strong>
+                        <strong>
+                          {getInventoryListDisplayName(item)}
+                        </strong>
                         <span className="inventory-item__location">
                           {locationLabels[item.location]}
                         </span>
                       </div>
 
-                      <p>
-                        {item.quantity} {item.unit}
-                      </p>
                     </div>
 
                     <div className="inventory-item__actions">

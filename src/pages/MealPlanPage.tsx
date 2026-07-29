@@ -19,11 +19,17 @@ import RecipeSpaceSwitcher from '../components/RecipeSpaceSwitcher'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
+import DatePickerField from '../components/ui/DatePickerField'
+import Dialog from '../components/ui/Dialog'
 import EmptyState from '../components/ui/EmptyState'
+import PositiveIntegerInput from '../components/ui/PositiveIntegerInput'
 import ScreenHeader from '../components/ui/ScreenHeader'
 import Section from '../components/ui/Section'
+import Spinner from '../components/ui/Spinner'
+import StyledSelect from '../components/ui/StyledSelect'
 import Toast from '../components/ui/Toast'
 import useAiMealPlanTrial from '../hooks/useAiMealPlanTrial'
+import useHistoryModal from '../hooks/useHistoryModal'
 import useInventory from '../hooks/useInventory'
 import useMealPlan from '../hooks/useMealPlan'
 import useRecipes from '../hooks/useRecipes'
@@ -37,6 +43,9 @@ import {
   type MealPlanViewRange,
 } from '../services/defaultMealPlanEngine'
 import {
+  getAiMealPlanTrialFailureState,
+} from '../services/aiMealPlanTrialEngine'
+import {
   createMealPlanRangeShoppingSourceId,
   createMealPlanShoppingIngredients,
 } from '../services/mealPlanShoppingEngine'
@@ -44,7 +53,11 @@ import type {
   MealType,
   PlannedMeal,
 } from '../types/meal'
-import type { SpicePreference } from '../types/aiMealPlanTrial'
+import type {
+  AiMealPlanDraftDay,
+  SpicePreference,
+  StoredAiMealPlanTrial,
+} from '../types/aiMealPlanTrial'
 
 const mealTypeOptions: {
   value: MealType
@@ -92,6 +105,7 @@ type MealPlanPageProps = {
   openAiTrial?: boolean
   onChangePage: (page: PageName) => void
   onOpenRecipeDetail: (recipeId: string) => void
+  onInitialRecipeConsumed?: () => void
 }
 
 type MealPlanFeedback = {
@@ -100,11 +114,43 @@ type MealPlanFeedback = {
   message: string
 }
 
+type AiFailureFeedback = ReturnType<
+  typeof getAiMealPlanTrialFailureState
+>
+
+const aiLoadingStages = [
+  '가족 조건 분석 중',
+  '식단 구성 중',
+  '레시피 준비 중',
+  '장보기 계산 중',
+]
+
+const weekdayLabels = [
+  '일',
+  '월',
+  '화',
+  '수',
+  '목',
+  '금',
+  '토',
+]
+
+function formatMealPlanDate(dateKey: string) {
+  const [year, month, day] = dateKey
+    .split('-')
+    .map(Number)
+  const date = new Date(year, month - 1, day)
+  const weekday = weekdayLabels[date.getDay()]
+
+  return `${dateKey} (${weekday})`
+}
+
 function MealPlanPage({
   initialRecipeName,
   openAiTrial = false,
   onChangePage,
   onOpenRecipeDetail,
+  onInitialRecipeConsumed,
 }: MealPlanPageProps) {
   const mealNameInputRef =
     useRef<HTMLInputElement>(null)
@@ -128,7 +174,9 @@ function MealPlanPage({
   const {
     storedTrial,
     isGenerating,
+    generatingRecipeIds,
     generateTrial,
+    ensureRecipeDetail,
   } = useAiMealPlanTrial()
   const [date, setDate] = useState(getTodayDateKey)
   const [mealType, setMealType] =
@@ -164,6 +212,27 @@ function MealPlanPage({
     weekdayMaxMinutes,
     setWeekdayMaxMinutes,
   ] = useState(40)
+  const [
+    aiLoadingStageIndex,
+    setAiLoadingStageIndex,
+  ] = useState(0)
+  const [aiDetailErrors, setAiDetailErrors] =
+    useState<Record<string, string>>({})
+  const aiFailureModal =
+    useHistoryModal<AiFailureFeedback>(
+      'ai-meal-plan-failure',
+    )
+
+  useEffect(() => {
+    if (!initialRecipeName) {
+      return
+    }
+
+    onInitialRecipeConsumed?.()
+  }, [
+    initialRecipeName,
+    onInitialRecipeConsumed,
+  ])
 
   const visibleMealPlans = getMealPlansInRange(
     mealPlans,
@@ -183,6 +252,24 @@ function MealPlanPage({
       })
     })
   }, [openAiTrial, storedTrial])
+
+  useEffect(() => {
+    if (!isGenerating) {
+      return
+    }
+
+    const intervalId = window.setInterval(() => {
+      setAiLoadingStageIndex(
+        (currentIndex) =>
+          (currentIndex + 1) %
+          aiLoadingStages.length,
+      )
+    }, 2400)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [isGenerating])
 
   function resetEditor() {
     setMealName('')
@@ -402,20 +489,100 @@ function MealPlanPage({
     })
   }
 
-  async function handleGenerateAiTrial(
+  function handleGenerateAiTrial(
     event: FormEvent<HTMLFormElement>,
   ) {
     event.preventDefault()
+    void runAiTrialGeneration()
+  }
 
+  function syncAiTrialShopping(
+    trial: StoredAiMealPlanTrial,
+  ) {
+    return replaceMealPlanRangeItems(
+      createMealPlanRangeShoppingSourceId(
+        trial.response.plans[0].date,
+        'week',
+      ),
+      trial.response.weeklyShoppingIngredients,
+    )
+  }
+
+  async function prepareAiRecipeDetail(
+    day: AiMealPlanDraftDay,
+    openAfterReady = false,
+    signal?: AbortSignal,
+  ) {
+    setAiDetailErrors((current) => {
+      const next = { ...current }
+      delete next[day.recipeId]
+      return next
+    })
+
+    try {
+      const trial = await ensureRecipeDetail(
+        day,
+        signal,
+      )
+
+      syncAiTrialShopping(trial)
+      if (openAfterReady) {
+        onOpenRecipeDetail(day.recipeId)
+      }
+
+      return trial
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : '상세 레시피를 만들지 못했어요.'
+
+      setAiDetailErrors((current) => ({
+        ...current,
+        [day.recipeId]: message,
+      }))
+      throw error
+    }
+  }
+
+  function handleOpenAiRecipe(
+    day: AiMealPlanDraftDay,
+  ) {
+    const hasRecipe =
+      storedTrial?.response.recipes.some(
+        (recipe) => recipe.id === day.recipeId,
+      )
+
+    if (hasRecipe) {
+      onOpenRecipeDetail(day.recipeId)
+      return
+    }
+
+    void prepareAiRecipeDetail(day, true).catch(
+      () => undefined,
+    )
+  }
+
+  function dismissAiDetailError(recipeId: string) {
+    setAiDetailErrors((current) => {
+      const next = { ...current }
+      delete next[recipeId]
+      return next
+    })
+  }
+
+  async function runAiTrialGeneration() {
     if (storedTrial || isGenerating) {
       return
     }
 
+    setAiLoadingStageIndex(0)
+    setFeedback(null)
     const abortController = new AbortController()
     aiAbortControllerRef.current = abortController
 
     try {
-      const response = await generateTrial(
+      const trial = await generateTrial(
         {
           startDate: getTodayDateKey(),
           householdSize,
@@ -455,44 +622,79 @@ function MealPlanPage({
         abortController.signal,
       )
 
-      replaceMealPlanSlots(response.plans)
-      replaceMealPlanRangeItems(
-        createMealPlanRangeShoppingSourceId(
-          response.plans[0].date,
-          'week',
-        ),
-        response.weeklyShoppingIngredients,
+      replaceMealPlanSlots(trial.response.plans)
+      setRangeStartDate(
+        trial.response.plans[0].date,
       )
-      setRangeStartDate(response.plans[0].date)
       setViewRange('week')
       setFeedback({
         tone: 'success',
-        title: '우리 가족 맞춤 7일 식단을 만들었어요.',
+        title: '맞춤 식단을 완성했어요.',
         message:
-          '식단과 상세 레시피, 일주일 장보기 목록을 이 기기에 저장했어요.',
+          '메뉴를 열면 상세 레시피도 준비해드려요.',
       })
+
+      const firstDay = trial.response.days[0]
+
+      try {
+        const completedTrial =
+          await prepareAiRecipeDetail(
+            firstDay,
+            false,
+            abortController.signal,
+          )
+
+        setFeedback({
+          tone: 'success',
+          title: '맞춤 7일 식단을 저장했어요.',
+          message:
+            completedTrial.response
+              .recipeSources[firstDay.recipeId] ===
+            'golden'
+              ? '첫날 메뉴는 검수된 레시피를 바로 연결했어요. 다른 메뉴는 열 때 준비해드려요.'
+              : '첫날 상세 레시피까지 저장했어요. 다른 메뉴는 열 때 준비해드려요.',
+        })
+      } catch {
+        setFeedback({
+          tone: 'danger',
+          title:
+            '7일 식단 초안은 안전하게 저장했어요.',
+          message:
+            '첫날 상세 레시피를 다시 준비하면 무료 체험이 완료돼요.',
+        })
+      }
     } catch (error) {
       const trialError =
         error instanceof AiMealPlanTrialError
           ? error
           : null
 
-      setFeedback({
-        tone:
-          trialError?.code === 'AI_TRIAL_CANCELLED'
-            ? 'success'
-            : 'danger',
-        title:
-          trialError?.code === 'AI_TRIAL_CANCELLED'
-            ? '맞춤 식단 만들기를 취소했어요.'
-            : '맞춤 식단을 만들지 못했어요.',
-        message:
-          trialError?.message ??
-          '무료 체험은 사용 처리되지 않았어요. 잠시 후 다시 시도해 주세요.',
-      })
+      if (
+        trialError?.code === 'AI_TRIAL_CANCELLED'
+      ) {
+        setFeedback({
+          tone: 'success',
+          title: '맞춤 식단 만들기를 취소했어요.',
+          message:
+            '무료 체험은 사용 처리되지 않았어요.',
+        })
+      } else {
+        aiFailureModal.openModal(
+          getAiMealPlanTrialFailureState(
+            trialError?.code,
+          ),
+        )
+      }
     } finally {
       aiAbortControllerRef.current = null
     }
+  }
+
+  function handleRetryAiTrial() {
+    aiFailureModal.closeModal()
+    window.setTimeout(() => {
+      void runAiTrialGeneration()
+    }, 0)
   }
 
   return (
@@ -525,38 +727,33 @@ function MealPlanPage({
               onSubmit={handleSubmit}
             >
               <div className="inventory-form__row">
-                <label className="inventory-form__field">
-                  날짜
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(event) =>
-                      setDate(event.target.value)
-                    }
-                    required
-                  />
-                </label>
+                <DatePickerField
+                  label="날짜"
+                  value={date}
+                  onChange={(event) =>
+                    setDate(event.target.value)
+                  }
+                  required
+                />
 
-                <label className="inventory-form__field">
-                  식사 시간
-                  <select
-                    value={mealType}
-                    onChange={(event) =>
-                      setMealType(
-                        event.target.value as MealType,
-                      )
-                    }
-                  >
-                    {mealTypeOptions.map((option) => (
-                      <option
-                        key={option.value}
-                        value={option.value}
-                      >
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <StyledSelect
+                  label="식사 시간"
+                  value={mealType}
+                  onChange={(event) =>
+                    setMealType(
+                      event.target.value as MealType,
+                    )
+                  }
+                >
+                  {mealTypeOptions.map((option) => (
+                    <option
+                      key={option.value}
+                      value={option.value}
+                    >
+                      {option.label}
+                    </option>
+                  ))}
+                </StyledSelect>
               </div>
 
               <label className="inventory-form__field">
@@ -582,21 +779,15 @@ function MealPlanPage({
                 </datalist>
               </label>
 
-              <label className="inventory-form__field">
-                인분
-                <input
-                  type="number"
-                  min={1}
-                  max={10}
-                  value={servings}
-                  onChange={(event) =>
-                    setServings(
-                      Number(event.target.value),
-                    )
-                  }
-                  required
-                />
-              </label>
+              <PositiveIntegerInput
+                label="인분"
+                min={1}
+                max={12}
+                defaultValue={4}
+                value={servings}
+                onValueChange={setServings}
+                required
+              />
 
               <div className="meal-editor__actions">
                 {editingId ? (
@@ -680,9 +871,9 @@ function MealPlanPage({
                       aria-hidden="true"
                     />
                   </Button>
-                  <input
-                    type="date"
-                    aria-label="보기 시작 날짜"
+                  <DatePickerField
+                    label="보기 시작 날짜"
+                    labelHidden
                     value={rangeStartDate}
                     onChange={(event) =>
                       setRangeStartDate(
@@ -773,13 +964,33 @@ function MealPlanPage({
                           {mealPlan.recipeId ? (
                             <Button
                               variant="ghost"
-                              onClick={() =>
-                                onOpenRecipeDetail(
-                                  mealPlan.recipeId!,
-                                )
-                              }
+                              disabled={generatingRecipeIds.includes(
+                                mealPlan.recipeId,
+                              )}
+                              onClick={() => {
+                                const aiDay =
+                                  storedTrial?.response.days.find(
+                                    (day) =>
+                                      day.recipeId ===
+                                      mealPlan.recipeId,
+                                  )
+
+                                if (aiDay) {
+                                  handleOpenAiRecipe(
+                                    aiDay,
+                                  )
+                                } else {
+                                  onOpenRecipeDetail(
+                                    mealPlan.recipeId!,
+                                  )
+                                }
+                              }}
                             >
-                              레시피
+                              {generatingRecipeIds.includes(
+                                mealPlan.recipeId,
+                              )
+                                ? '준비 중'
+                                : '레시피'}
                             </Button>
                           ) : null}
                           <Button
@@ -838,27 +1049,25 @@ function MealPlanPage({
         >
           <Card>
             <div className="meal-plan-shopping">
-              <label className="inventory-form__field">
-                장보기 범위
-                <select
-                  value={shoppingRange}
-                  onChange={(event) =>
-                    setShoppingRange(
-                      event.target
-                        .value as MealPlanViewRange,
-                    )
-                  }
-                >
-                  {rangeOptions.map((option) => (
-                    <option
-                      key={option.value}
-                      value={option.value}
-                    >
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <StyledSelect
+                label="장보기 범위"
+                value={shoppingRange}
+                onChange={(event) =>
+                  setShoppingRange(
+                    event.target
+                      .value as MealPlanViewRange,
+                  )
+                }
+              >
+                {rangeOptions.map((option) => (
+                  <option
+                    key={option.value}
+                    value={option.value}
+                  >
+                    {option.label}
+                  </option>
+                ))}
+              </StyledSelect>
               <Button
                 fullWidth
                 onClick={handleCreateShoppingList}
@@ -877,7 +1086,10 @@ function MealPlanPage({
           </Card>
         </Section>
 
-        <div ref={aiTrialSectionRef}>
+        <div
+          ref={aiTrialSectionRef}
+          className="ai-trial-section"
+        >
           <Section
             title="AI 맞춤 7일 식단 무료 체험"
             description="우리 가족 조건에 맞춘 식단을 이 기기에 한 번 저장해요."
@@ -885,19 +1097,33 @@ function MealPlanPage({
             <Card>
               {storedTrial ? (
                 <div className="ai-trial-complete">
-                  <Badge tone="success">
-                    체험 사용 완료
+                  <Badge
+                    tone={
+                      storedTrial.status ===
+                      'completed'
+                        ? 'success'
+                        : 'warning'
+                    }
+                  >
+                    {storedTrial.status ===
+                    'completed'
+                      ? '체험 사용 완료'
+                      : '초안 저장됨 · 체험 미사용'}
                   </Badge>
                   <h3>
-                    맞춤 7일 식단을 저장해 두었어요.
+                    {storedTrial.status ===
+                    'completed'
+                      ? '맞춤 7일 식단을 저장해 두었어요.'
+                      : '맞춤 식단 초안을 저장했어요.'}
                   </h3>
                   <p>
-                    다시 열어도 API를 호출하지 않고 이
-                    기기에 저장된 결과를 보여드려요.
+                    메뉴를 처음 열면 상세 레시피를
+                    준비하고, 완료된 메뉴는 다시 호출하지
+                    않아요.
                   </p>
                   <div className="ai-trial-shopping-summary">
                     <strong>
-                      부족한 재료 · 일주일 장보기
+                      현재 계산된 장보기
                     </strong>
                     <p>
                       {storedTrial.response
@@ -909,21 +1135,134 @@ function MealPlanPage({
                                 `${ingredient.name} ${ingredient.quantity}${ingredient.unit}`,
                             )
                             .join(', ')
-                        : '냉장고 재료만으로 준비할 수 있어요.'}
+                        : '상세 레시피가 준비되면 정확한 수량을 계산해요.'}
                     </p>
+                    {storedTrial.response.days.some(
+                      (day) =>
+                        !storedTrial.response.recipes.some(
+                          (recipe) =>
+                            recipe.id ===
+                            day.recipeId,
+                        ) &&
+                        day.missingIngredientNames
+                          .length > 0,
+                    ) ? (
+                      <p>
+                        수량 계산 중:{' '}
+                        {[
+                          ...new Set(
+                            storedTrial.response.days.flatMap(
+                              (day) =>
+                                storedTrial.response.recipes.some(
+                                  (recipe) =>
+                                    recipe.id ===
+                                    day.recipeId,
+                                )
+                                  ? []
+                                  : day.missingIngredientNames,
+                            ),
+                          ),
+                        ].join(', ')}
+                      </p>
+                    ) : null}
                   </div>
                   <ul>
-                    {storedTrial.response.plans.map(
-                      (plan) => (
-                        <li key={plan.id}>
-                          <time
-                            dateTime={plan.date}
+                    {storedTrial.response.days.map(
+                      (day) => {
+                        const isReady =
+                          storedTrial.response.recipes.some(
+                            (recipe) =>
+                              recipe.id ===
+                              day.recipeId,
+                          )
+                        const isPreparing =
+                          generatingRecipeIds.includes(
+                            day.recipeId,
+                          )
+
+                        return (
+                        <li
+                          key={day.recipeId}
+                          className="ai-trial-recipe-card"
+                        >
+                          <div className="ai-trial-recipe-card__heading">
+                            <strong>{day.name}</strong>
+                            <span className="ai-trial-recipe-card__meta">
+                              <time
+                                dateTime={day.date}
+                              >
+                                {formatMealPlanDate(
+                                  day.date,
+                                )}
+                              </time>
+                              <span>
+                                {day.prepMinutes +
+                                  day.cookMinutes}
+                                분 · {day.servings}
+                                인분
+                              </span>
+                            </span>
+                          </div>
+                          <Button
+                            variant={
+                              isReady
+                                ? 'ghost'
+                                : 'secondary'
+                            }
+                            disabled={isPreparing}
+                            onClick={() =>
+                              handleOpenAiRecipe(day)
+                            }
                           >
-                            {plan.date}
-                          </time>
-                          <strong>{plan.name}</strong>
+                            {isPreparing
+                              ? (
+                                  <Spinner label="레시피 준비 중" />
+                                )
+                              : isReady
+                                ? '레시피 보기'
+                                : '상세 레시피 준비'}
+                          </Button>
+                          {aiDetailErrors[
+                            day.recipeId
+                          ] ? (
+                            <div
+                              role="alert"
+                              className="ai-trial-inline-warning"
+                            >
+                              <strong>
+                                레시피 준비가 조금 늦어지고
+                                있어요.
+                              </strong>
+                              <p>
+                                잠시 후 다시 시도하면 이어서
+                                준비할 수 있습니다.
+                              </p>
+                              <div>
+                                <Button
+                                  variant="secondary"
+                                  disabled={isPreparing}
+                                  onClick={() =>
+                                    handleOpenAiRecipe(day)
+                                  }
+                                >
+                                  다시 시도
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  onClick={() =>
+                                    dismissAiDetailError(
+                                      day.recipeId,
+                                    )
+                                  }
+                                >
+                                  닫기
+                                </Button>
+                              </div>
+                            </div>
+                          ) : null}
                         </li>
-                      ),
+                        )
+                      },
                     )}
                   </ul>
                 </div>
@@ -933,42 +1272,30 @@ function MealPlanPage({
                   onSubmit={handleGenerateAiTrial}
                 >
                   <div className="inventory-form__row">
-                    <label className="inventory-form__field">
-                      식사 인원
-                      <input
-                        type="number"
-                        min={1}
-                        max={10}
-                        value={householdSize}
-                        onChange={(event) =>
-                          setHouseholdSize(
-                            Number(
-                              event.target.value,
-                            ),
-                          )
-                        }
-                        disabled={isGenerating}
-                      />
-                    </label>
-                    <label className="inventory-form__field">
-                      평일 최대 조리시간
-                      <select
-                        value={weekdayMaxMinutes}
-                        onChange={(event) =>
-                          setWeekdayMaxMinutes(
-                            Number(
-                              event.target.value,
-                            ),
-                          )
-                        }
-                        disabled={isGenerating}
-                      >
-                        <option value={20}>20분</option>
-                        <option value={30}>30분</option>
-                        <option value={40}>40분</option>
-                        <option value={60}>60분</option>
-                      </select>
-                    </label>
+                    <PositiveIntegerInput
+                      label="식사 인원"
+                      min={1}
+                      max={12}
+                      defaultValue={4}
+                      value={householdSize}
+                      onValueChange={setHouseholdSize}
+                      disabled={isGenerating}
+                    />
+                    <StyledSelect
+                      label="평일 최대 조리시간"
+                      value={weekdayMaxMinutes}
+                      onChange={(event) =>
+                        setWeekdayMaxMinutes(
+                          Number(event.target.value),
+                        )
+                      }
+                      disabled={isGenerating}
+                    >
+                      <option value={20}>20분</option>
+                      <option value={30}>30분</option>
+                      <option value={40}>40분</option>
+                      <option value={60}>60분</option>
+                    </StyledSelect>
                   </div>
 
                   <label className="ai-trial-checkbox">
@@ -1002,29 +1329,27 @@ function MealPlanPage({
                     </label>
                   ) : null}
 
-                  <label className="inventory-form__field">
-                    맵기 선호
-                    <select
-                      value={spicePreference}
-                      onChange={(event) =>
-                        setSpicePreference(
-                          event.target
-                            .value as SpicePreference,
-                        )
-                      }
-                      disabled={isGenerating}
-                    >
-                      <option value="mild">
-                        순한 맛
-                      </option>
-                      <option value="medium">
-                        보통 맛
-                      </option>
-                      <option value="spicy">
-                        매운 맛
-                      </option>
-                    </select>
-                  </label>
+                  <StyledSelect
+                    label="맵기 선호"
+                    value={spicePreference}
+                    onChange={(event) =>
+                      setSpicePreference(
+                        event.target
+                          .value as SpicePreference,
+                      )
+                    }
+                    disabled={isGenerating}
+                  >
+                    <option value="mild">
+                      순한 맛
+                    </option>
+                    <option value="medium">
+                      보통 맛
+                    </option>
+                    <option value="spicy">
+                      매운 맛
+                    </option>
+                  </StyledSelect>
 
                   <label className="inventory-form__field">
                     선호 음식
@@ -1069,6 +1394,33 @@ function MealPlanPage({
                     />
                   </label>
 
+                  {isGenerating ? (
+                    <div
+                      className="ai-trial-loading"
+                      aria-live="polite"
+                      aria-atomic="true"
+                    >
+                      <Spinner label="AI 식단 생성 중" />
+                      <div>
+                        <strong>
+                          AI가 7일 식단 초안을 만들고
+                          있어요
+                        </strong>
+                        <p>
+                          상세 레시피는 메뉴를 열 때
+                          한 개씩 준비해요.
+                        </p>
+                        <span>
+                          {
+                            aiLoadingStages[
+                              aiLoadingStageIndex
+                            ]
+                          }
+                        </span>
+                      </div>
+                    </div>
+                  ) : null}
+
                   <div className="meal-editor__actions">
                     {isGenerating ? (
                       <Button
@@ -1094,7 +1446,7 @@ function MealPlanPage({
                         aria-hidden="true"
                       />
                       {isGenerating
-                        ? '7일 식단 만드는 중'
+                        ? 'AI가 식단 초안을 만들고 있어요'
                         : 'AI 맞춤 7일 식단 만들기'}
                     </Button>
                   </div>
@@ -1121,6 +1473,35 @@ function MealPlanPage({
           }
         />
       </main>
+
+      <Dialog
+        className="ai-trial-failure-dialog"
+        open={aiFailureModal.isOpen}
+        title="레시피 준비가 조금 늦어지고 있어요."
+        description="잠시 후 다시 시도하면 이어서 준비할 수 있습니다."
+        onClose={aiFailureModal.closeModal}
+        footer={
+          <>
+            <Button
+              disabled={isGenerating}
+              onClick={handleRetryAiTrial}
+            >
+              다시 시도
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={aiFailureModal.closeModal}
+            >
+              닫기
+            </Button>
+          </>
+        }
+      >
+        <p className="ai-trial-failure-note">
+          실패한 결과는 저장하지 않았고 무료 체험도
+          사용 처리하지 않았어요.
+        </p>
+      </Dialog>
 
       {feedback ? (
         <Toast

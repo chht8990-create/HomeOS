@@ -46,13 +46,31 @@ function cloneResponse(
       (recommendation) => ({
         ...recommendation,
         ingredients: recommendation.ingredients.map(
-          (ingredient) => ({ ...ingredient }),
+          (ingredient) => ({
+            ...ingredient,
+            substitute: [...ingredient.substitute],
+          }),
         ),
         missingIngredients:
           recommendation.missingIngredients.map(
             (ingredient) => ({ ...ingredient }),
           ),
-        steps: [...recommendation.steps],
+        steps: recommendation.steps.map((step) => ({
+          ...step,
+          ingredientRefs: [...step.ingredientRefs],
+        })),
+        seasoningAdjustment: [
+          ...recommendation.seasoningAdjustment,
+        ],
+        commonMistakes: [
+          ...recommendation.commonMistakes,
+        ],
+        leftoverIdeas: [
+          ...recommendation.leftoverIdeas,
+        ],
+        servingSuggestions: [
+          ...recommendation.servingSuggestions,
+        ],
       }),
     ),
     meta: { ...response.meta },

@@ -14,6 +14,7 @@ export type PageName =
   | 'inventory'
   | 'recipes'
   | 'settings'
+  | 'guide'
 
 type BottomNavigationProps = {
   currentPage: PageName

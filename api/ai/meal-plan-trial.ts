@@ -1,10 +1,10 @@
 import {
-  parseAiMealPlanTrialOutput,
+  parseAiMealPlanDraftOutput,
   validateAiMealPlanTrialRequest,
 } from '../../src/services/aiMealPlanTrialEngine.js'
 import type {
+  AiMealPlanDraftResponse,
   AiMealPlanTrialRequest,
-  AiMealPlanTrialResponse,
 } from '../../src/types/aiMealPlanTrial.js'
 
 type AiServerEnvironment = {
@@ -23,24 +23,25 @@ type AiUsage = {
 const OPENAI_RESPONSES_URL =
   'https://api.openai.com/v1/responses'
 const DEFAULT_MODEL = 'gpt-5.6-luna'
-const SERVER_TIMEOUT_MS = 40_000
+const SERVER_TIMEOUT_MS = 30_000
 const MAX_REQUEST_BYTES = 24_000
-const MAX_RESPONSE_BYTES = 500_000
-const MAX_OUTPUT_TOKENS = 11_000
+const MAX_RESPONSE_BYTES = 120_000
+const MAX_OUTPUT_TOKENS = 4_000
+const MAX_UPSTREAM_RETRIES = 0
 const RECENT_RESPONSE_WINDOW_MS = 30_000
 const responseCache = new Map<
   string,
   {
     createdAt: number
-    response: AiMealPlanTrialResponse
+    response: AiMealPlanDraftResponse
   }
 >()
 
 export const config = {
-  maxDuration: 45,
+  maxDuration: 35,
 }
 
-const ingredientSchema = {
+export const ingredientSchema = {
   type: 'object',
   additionalProperties: false,
   properties: {
@@ -59,11 +60,45 @@ const ingredientSchema = {
       minLength: 1,
       maxLength: 30,
     },
+    group: {
+      type: 'string',
+      enum: [
+        'main',
+        'seasoning',
+        'broth',
+        'garnish',
+        'optional',
+      ],
+    },
+    note: {
+      type: ['string', 'null'],
+      maxLength: 120,
+    },
+    optional: {
+      type: 'boolean',
+    },
+    substitute: {
+      type: 'array',
+      maxItems: 4,
+      items: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 80,
+      },
+    },
   },
-  required: ['name', 'quantity', 'unit'],
+  required: [
+    'name',
+    'quantity',
+    'unit',
+    'group',
+    'note',
+    'optional',
+    'substitute',
+  ],
 } as const
 
-const recipeSchema = {
+export const recipeSchema = {
   type: 'object',
   additionalProperties: false,
   properties: {
@@ -71,6 +106,20 @@ const recipeSchema = {
       type: 'string',
       minLength: 1,
       maxLength: 80,
+    },
+    description: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 240,
+    },
+    difficulty: {
+      type: 'string',
+      enum: ['쉬움', '보통', '어려움'],
+    },
+    calories: {
+      type: ['integer', 'null'],
+      minimum: 1,
+      maximum: 5000,
     },
     servings: {
       type: 'integer',
@@ -129,8 +178,8 @@ const recipeSchema = {
     },
     steps: {
       type: 'array',
-      minItems: 5,
-      maxItems: 10,
+      minItems: 8,
+      maxItems: 12,
       items: {
         type: 'object',
         additionalProperties: false,
@@ -145,34 +194,114 @@ const recipeSchema = {
             minLength: 1,
             maxLength: 300,
           },
-          minutes: {
+          title: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 80,
+          },
+          durationMinutes: {
             type: 'integer',
             minimum: 1,
             maximum: 120,
           },
-          heat: {
+          heatLevel: {
             type: 'string',
             minLength: 1,
             maxLength: 40,
           },
-          doneness: {
+          completionCue: {
             type: 'string',
             minLength: 1,
-            maxLength: 160,
+            maxLength: 180,
+          },
+          reason: {
+            type: ['string', 'null'],
+            maxLength: 180,
+          },
+          warning: {
+            type: ['string', 'null'],
+            maxLength: 180,
+          },
+          ingredientRefs: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 25,
+            items: {
+              type: 'string',
+              minLength: 1,
+              maxLength: 80,
+            },
           },
         },
         required: [
           'order',
+          'title',
           'instruction',
-          'minutes',
-          'heat',
-          'doneness',
+          'durationMinutes',
+          'heatLevel',
+          'completionCue',
+          'reason',
+          'warning',
+          'ingredientRefs',
         ],
+      },
+    },
+    seasoningAdjustment: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 4,
+      items: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 180,
+      },
+    },
+    commonMistakes: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 4,
+      items: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 180,
+      },
+    },
+    storage: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 240,
+    },
+    reheating: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 240,
+    },
+    leftoverIdeas: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 4,
+      items: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 180,
+      },
+    },
+    servingSuggestions: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 4,
+      items: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 180,
       },
     },
   },
   required: [
     'name',
+    'description',
+    'difficulty',
+    'calories',
     'servings',
     'prepMinutes',
     'cookMinutes',
@@ -180,6 +309,12 @@ const recipeSchema = {
     'optionalIngredients',
     'substitutions',
     'steps',
+    'seasoningAdjustment',
+    'commonMistakes',
+    'storage',
+    'reheating',
+    'leftoverIdeas',
+    'servingSuggestions',
   ],
 } as const
 
@@ -200,9 +335,73 @@ const responseSchema = {
             minimum: 1,
             maximum: 7,
           },
-          recipe: recipeSchema,
+          name: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 80,
+          },
+          summary: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 240,
+          },
+          recommendationReason: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 240,
+          },
+          servings: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 10,
+          },
+          prepMinutes: {
+            type: 'integer',
+            minimum: 0,
+            maximum: 120,
+          },
+          cookMinutes: {
+            type: 'integer',
+            minimum: 5,
+            maximum: 180,
+          },
+          mainIngredientNames: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 8,
+            items: {
+              type: 'string',
+              minLength: 1,
+              maxLength: 80,
+            },
+          },
+          missingIngredientNames: {
+            type: 'array',
+            maxItems: 12,
+            items: {
+              type: 'string',
+              minLength: 1,
+              maxLength: 80,
+            },
+          },
+          constraintCompliance: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 240,
+          },
         },
-        required: ['day', 'recipe'],
+        required: [
+          'day',
+          'name',
+          'summary',
+          'recommendationReason',
+          'servings',
+          'prepMinutes',
+          'cookMinutes',
+          'mainIngredientNames',
+          'missingIngredientNames',
+          'constraintCompliance',
+        ],
       },
     },
   },
@@ -236,16 +435,18 @@ function buildPrompt(
 ) {
   return JSON.stringify({
     task:
-      '한국 가정에서 가족이 함께 먹기 좋은 저녁 식단 7일과 메뉴별 실제 레시피를 한국어로 만드세요.',
+      '한국 가정에서 가족이 함께 먹기 좋은 저녁 식단 7일 초안을 한국어로 만드세요.',
     rules: [
       '7일의 메뉴와 주재료가 연속으로 반복되지 않게 하세요.',
       '평일 메뉴는 사용자가 정한 최대 조리시간을 넘기지 말고 주말은 조금 길어도 됩니다.',
       '냉장고 재료를 최대한 활용하고 부족 재료를 불필요하게 늘리지 마세요.',
-      '제외 음식과 알레르기는 양념, 고명, 대체 재료에도 절대 사용하지 마세요.',
+      '제외 음식과 알레르기는 메뉴, 주요 재료, 부족 재료에 절대 사용하지 마세요.',
       '아이 포함 시 연령대와 맵기 선호를 반영하세요.',
       '일반 가정에서 구하기 쉬운 재료와 도구를 사용하세요.',
-      '각 메뉴에 서로 다른 실제 조리 단계 5~10개, 단계 시간, 불 세기, 완성 상태를 쓰세요.',
-      '생고기와 달걀은 속까지 충분히 익히는 안전 기준을 포함하세요.',
+      '이 단계에서는 상세 재료 수량, 조리 단계, 불 세기, 보관과 재가열 정보를 생성하지 마세요.',
+      'mainIngredientNames에는 메뉴를 대표하는 재료명만, missingIngredientNames에는 현재 재고에 없는 재료명만 적으세요.',
+      'constraintCompliance에는 제외 음식, 알레르기, 아이와 맵기 조건을 어떻게 지켰는지 한 문장으로 적으세요.',
+      '각 설명과 추천 이유는 짧고 서로 다르게 쓰세요.',
     ],
     householdSize: request.householdSize,
     includesChildren: request.includesChildren,
@@ -407,7 +608,7 @@ function mapUpstreamError(status: number) {
 }
 
 function cloneResponse(
-  response: AiMealPlanTrialResponse,
+  response: AiMealPlanDraftResponse,
 ) {
   return structuredClone(response)
 }
@@ -425,57 +626,33 @@ function createMockResponse(
     '소고기 채소카레',
   ]
   const parsedResponse =
-    parseAiMealPlanTrialOutput(
+    parseAiMealPlanDraftOutput(
       {
         days: menuNames.map((name, index) => ({
           day: index + 1,
-          recipe: {
-            name,
-            servings: request.householdSize,
-            prepMinutes: 10,
-            cookMinutes:
-              index < 5
-                ? Math.max(
-                    15,
-                    request.weekdayMaxMinutes - 10,
-                  )
-                : 35,
-            ingredients: [
-              {
-                name:
-                  index % 2 === 0
-                    ? '계란'
-                    : '두부',
-                quantity:
-                  index % 2 === 0 ? 4 : 1,
-                unit:
-                  index % 2 === 0 ? '개' : '모',
-              },
-              {
-                name: `채소 ${index + 1}`,
-                quantity: 1,
-                unit: '개',
-              },
-            ],
-            optionalIngredients: [],
-            substitutions: [
-              {
-                ingredientName: `채소 ${index + 1}`,
-                alternatives: ['버섯 100g'],
-              },
-            ],
-            steps: Array.from(
-              { length: 5 },
-              (_, stepIndex) => ({
-                order: stepIndex + 1,
-                instruction: `${stepIndex + 1}단계로 재료를 안전하게 조리해요.`,
-                minutes: 5,
-                heat: '중불',
-                doneness:
-                  '재료의 속까지 충분히 익었어요.',
-              }),
-            ),
-          },
+          name,
+          summary:
+            `${name}을(를) 가족이 함께 먹기 좋게 준비해요.`,
+          recommendationReason:
+            '냉장고 재료와 가족 조건을 반영했어요.',
+          servings: request.householdSize,
+          prepMinutes: 10,
+          cookMinutes:
+            index < 5
+              ? Math.max(
+                  15,
+                  request.weekdayMaxMinutes - 10,
+                )
+              : 35,
+          mainIngredientNames: [
+            index % 2 === 0 ? '계란' : '두부',
+            `채소 ${index + 1}`,
+          ],
+          missingIngredientNames: [
+            `채소 ${index + 1}`,
+          ],
+          constraintCompliance:
+            '제외 음식과 알레르기를 사용하지 않았어요.',
         })),
       },
       request,
@@ -502,6 +679,40 @@ function getCachedResponse(signature: string) {
   }
 
   return cloneResponse(cached.response)
+}
+
+async function fetchOpenAiWithRetry(
+  init: RequestInit,
+) {
+  let lastError: unknown
+
+  for (
+    let attempt = 0;
+    attempt <= MAX_UPSTREAM_RETRIES;
+    attempt += 1
+  ) {
+    try {
+      const response = await fetch(
+        OPENAI_RESPONSES_URL,
+        init,
+      )
+
+      if (
+        response.status < 500 ||
+        attempt === MAX_UPSTREAM_RETRIES
+      ) {
+        return response
+      }
+    } catch (error) {
+      lastError = error
+
+      if (attempt === MAX_UPSTREAM_RETRIES) {
+        throw error
+      }
+    }
+  }
+
+  throw lastError ?? new Error('OpenAI request failed.')
 }
 
 async function requestOpenAi(
@@ -541,9 +752,8 @@ async function requestOpenAi(
   }
 
   try {
-    const openAiResponse = await fetch(
-      OPENAI_RESPONSES_URL,
-      {
+    const openAiResponse =
+      await fetchOpenAiWithRetry({
         method: 'POST',
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -574,7 +784,7 @@ async function requestOpenAi(
             verbosity: 'low',
             format: {
               type: 'json_schema',
-              name: 'today_table_weekly_meal_plan',
+              name: 'today_table_weekly_meal_plan_draft',
               strict: true,
               schema: responseSchema,
             },
@@ -582,8 +792,7 @@ async function requestOpenAi(
           max_output_tokens: MAX_OUTPUT_TOKENS,
         }),
         signal: abortController.signal,
-      },
-    )
+      })
     const responseText =
       await openAiResponse.text()
 
@@ -684,7 +893,7 @@ async function requestOpenAi(
     }
 
     const parsedResponse =
-      parseAiMealPlanTrialOutput(
+      parseAiMealPlanDraftOutput(
         structuredOutput,
         request,
       )
@@ -699,6 +908,15 @@ async function requestOpenAi(
     }
 
     parsedResponse.meta.model = model
+    parsedResponse.meta.durationMs =
+      Date.now() - startedAt
+    parsedResponse.meta.outputBytes =
+      new TextEncoder().encode(
+        structuredText,
+      ).byteLength
+    if (usage) {
+      parsedResponse.meta.usage = usage
+    }
     finishInvocation(true)
     return jsonResponse(parsedResponse)
   } catch (error) {
@@ -820,7 +1038,7 @@ export async function handleAiMealPlanTrial(
   if (response.ok) {
     const responseBody =
       (await response.clone().json()) as
-        AiMealPlanTrialResponse
+        AiMealPlanDraftResponse
 
     responseCache.set(signature, {
       createdAt: Date.now(),

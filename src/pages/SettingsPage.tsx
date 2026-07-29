@@ -3,7 +3,10 @@ import {
   type ChangeEvent,
 } from 'react'
 import {
+  BookOpen,
   PackageOpen,
+  RotateCcw,
+  Ruler,
   Upload,
 } from 'lucide-react'
 import Button from '../components/ui/Button'
@@ -13,6 +16,8 @@ import ScreenHeader from '../components/ui/ScreenHeader'
 import Section from '../components/ui/Section'
 import useHomeOsBackup from '../hooks/useHomeOsBackup'
 import useMealPackImport from '../hooks/useMealPackImport'
+import useMeasurementPreferences from '../hooks/useMeasurementPreferences'
+import { measurementToolOptions } from '../services/measurementEngine'
 import type { HomeOsBackup } from '../services/homeOsBackupEngine'
 import type { MealType } from '../types/meal'
 import type { MealPackPreview } from '../services/mealPackEngine'
@@ -24,13 +29,25 @@ const mealTypeLabels: Record<MealType, string> = {
   snack: '간식',
 }
 
-function SettingsPage() {
+type SettingsPageProps = {
+  onOpenGuide: () => void
+  onReplayTutorial: () => void
+}
+
+function SettingsPage({
+  onOpenGuide,
+  onReplayTutorial,
+}: SettingsPageProps) {
   const { prepare, apply } = useMealPackImport()
   const {
     exportBackup,
     prepareImport: prepareBackupImport,
     applyImport: applyBackupImport,
   } = useHomeOsBackup()
+  const {
+    selectedTools,
+    toggleTool,
+  } = useMeasurementPreferences()
   const [fileInputKey, setFileInputKey] =
     useState(0)
   const [selectedFileName, setSelectedFileName] =
@@ -218,7 +235,7 @@ function SettingsPage() {
             <ul className="inventory-list">
               <li className="inventory-item">
                 <strong>앱 버전</strong>
-                <span>1.0.0</span>
+                <span>1.0.1</span>
               </li>
               <li className="inventory-item">
                 <strong>데이터 저장 위치</strong>
@@ -229,6 +246,78 @@ function SettingsPage() {
                 <span>하지 않음</span>
               </li>
             </ul>
+          </Card>
+        </Section>
+
+        <Section
+          title="집에 있는 계량도구"
+          description="선택한 도구를 레시피 계량 도우미에서 먼저 보여드려요."
+        >
+          <Card className="settings-measurement-card">
+            <div className="settings-measurement-card__heading">
+              <Ruler
+                size={22}
+                strokeWidth={2}
+                aria-hidden="true"
+              />
+              <p>
+                사용 가능한 도구를 모두 선택해
+                주세요. 변경 내용은 이 기기에 바로
+                저장됩니다.
+              </p>
+            </div>
+
+            <fieldset className="settings-tool-list">
+              <legend className="ui-visually-hidden">
+                집에 있는 계량도구
+              </legend>
+              {measurementToolOptions.map(
+                (option) => (
+                  <label key={option.value}>
+                    <input
+                      type="checkbox"
+                      checked={selectedTools.includes(
+                        option.value,
+                      )}
+                      onChange={() =>
+                        toggleTool(option.value)
+                      }
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ),
+              )}
+            </fieldset>
+          </Card>
+        </Section>
+
+        <Section
+          title="도움말"
+          description="사용 방법을 다시 살펴보거나 첫 안내를 재생하세요."
+        >
+          <Card className="settings-help-card">
+            <Button
+              variant="secondary"
+              fullWidth
+              onClick={onOpenGuide}
+            >
+              <BookOpen
+                size={18}
+                aria-hidden="true"
+              />
+              오늘식탁 사용 가이드
+            </Button>
+            <Button
+              variant="ghost"
+              fullWidth
+              onClick={onReplayTutorial}
+            >
+              <RotateCcw
+                size={18}
+                aria-hidden="true"
+              />
+              튜토리얼 다시 보기
+            </Button>
           </Card>
         </Section>
 

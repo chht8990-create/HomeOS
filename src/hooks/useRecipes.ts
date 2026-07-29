@@ -6,6 +6,10 @@ import {
   AI_MEAL_PLAN_TRIAL_STORAGE_KEY,
   parseStoredAiMealPlanTrial,
 } from '../services/aiMealPlanTrialEngine'
+import {
+  mergeRecipeCatalog,
+  normalizeRecipeCollection,
+} from '../services/recipeNormalizationEngine'
 import type { Recipe } from '../types/recipe'
 
 const STORAGE_KEY = 'homeos.recipes.imported'
@@ -35,7 +39,7 @@ function readImportedRecipes(): Recipe[] {
       }
     }
 
-    return parsedRecipes
+    return normalizeRecipeCollection(parsedRecipes)
   } catch {
     window.localStorage.removeItem(STORAGE_KEY)
     return []
@@ -52,10 +56,10 @@ function readAiMealPlanTrialRecipes(): Recipe[] {
   }
 
   try {
-    return (
+    return normalizeRecipeCollection(
       parseStoredAiMealPlanTrial(
         JSON.parse(storedValue),
-      )?.response.recipes ?? []
+      )?.response.recipes ?? [],
     )
   } catch {
     return []
@@ -124,17 +128,13 @@ function useRecipes() {
     window.dispatchEvent(new Event(CHANGE_EVENT))
   }
 
-  const allRecipes = [
-      ...builtInRecipes,
-      ...importedRecipes,
-      ...aiMealPlanTrialRecipes,
-    ].filter(
-      (recipe, index, recipes) =>
-        recipes.findIndex(
-          (candidate) =>
-            candidate.id === recipe.id,
-        ) === index,
-    )
+  const allRecipes = mergeRecipeCatalog(
+    builtInRecipes,
+    [
+      importedRecipes,
+      aiMealPlanTrialRecipes,
+    ],
+  )
 
   return {
     recipes: allRecipes,

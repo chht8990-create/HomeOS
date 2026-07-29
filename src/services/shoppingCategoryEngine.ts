@@ -1,7 +1,13 @@
 import type {
   ShoppingItem,
+  ShoppingPurchaseMode,
+  ShoppingPurchaseStatus,
   ShoppingItemSource,
 } from '../types/shopping'
+import {
+  normalizeShoppingItem,
+  summarizeShoppingPurchase,
+} from './shoppingPurchaseEngine'
 
 export const SHOPPING_CATEGORIES = [
   '채소',
@@ -36,6 +42,16 @@ export type ShoppingDisplayItem = {
   completed: boolean
   quantities: ShoppingDisplayQuantity[]
   sourceTypes: ShoppingItemSource[]
+  sourceIds: string[]
+  purchaseStatus: ShoppingPurchaseStatus
+  purchaseMode: ShoppingPurchaseMode
+  requiredQuantity: number
+  purchasedTotalQuantity: number
+  remainingPurchaseQuantity: number
+  surplusQuantity: number
+  inventoryAppliedQuantity: number
+  packageQuantity?: number
+  purchasedPackageCount?: number
 }
 
 const categoryKeywords: Record<
@@ -200,6 +216,7 @@ export function groupShoppingItemsByCategory(
 ): ShoppingCategoryGroup[] {
   return SHOPPING_CATEGORIES.flatMap((category) => {
     const categoryItems = items
+      .map(normalizeShoppingItem)
       .filter(
         (item) =>
           getShoppingCategory(item.name) === category,
@@ -215,7 +232,7 @@ export function groupShoppingItemsByCategory(
         .toLowerCase()
       const itemKey = [
         category,
-        item.completed ? 'completed' : 'remaining',
+        item.purchaseStatus,
         normalizedName,
       ].join(':')
       const existingItem = mergedItems.get(itemKey)
@@ -227,6 +244,18 @@ export function groupShoppingItemsByCategory(
           name: item.name.trim(),
           completed: item.completed,
           sourceTypes: [item.source],
+          sourceIds: item.sourceId
+            ? [item.sourceId]
+            : [],
+          purchaseStatus:
+            item.purchaseStatus ?? 'planned',
+          purchaseMode:
+            item.purchaseMode ?? 'single',
+          requiredQuantity: 0,
+          purchasedTotalQuantity: 0,
+          remainingPurchaseQuantity: 0,
+          surplusQuantity: 0,
+          inventoryAppliedQuantity: 0,
           quantities:
             item.quantity === undefined
               ? []
@@ -244,6 +273,13 @@ export function groupShoppingItemsByCategory(
 
       if (!existingItem.sourceTypes.includes(item.source)) {
         existingItem.sourceTypes.push(item.source)
+      }
+
+      if (
+        item.sourceId &&
+        !existingItem.sourceIds.includes(item.sourceId)
+      ) {
+        existingItem.sourceIds.push(item.sourceId)
       }
 
       if (item.quantity === undefined) {
@@ -266,16 +302,32 @@ export function groupShoppingItemsByCategory(
       })
     })
 
+    const itemById = new Map(
+      categoryItems.map((item) => [item.id, item]),
+    )
     const displayItems = Array.from(
       mergedItems.values(),
-      (item) => ({
-        ...item,
-        itemIds: [...item.itemIds],
-        sourceTypes: [...item.sourceTypes],
-        quantities: item.quantities.map(
-          (quantity) => ({ ...quantity }),
-        ),
-      }),
+      (item) => {
+        const purchaseSummary =
+          summarizeShoppingPurchase(
+            item.itemIds.flatMap((itemId) => {
+              const sourceItem = itemById.get(itemId)
+
+              return sourceItem ? [sourceItem] : []
+            }),
+          )
+
+        return {
+          ...item,
+          ...purchaseSummary,
+          itemIds: [...item.itemIds],
+          sourceTypes: [...item.sourceTypes],
+          sourceIds: [...item.sourceIds],
+          quantities: item.quantities.map(
+            (quantity) => ({ ...quantity }),
+          ),
+        }
+      },
     )
 
     return displayItems.length > 0

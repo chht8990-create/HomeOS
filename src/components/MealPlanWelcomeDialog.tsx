@@ -58,9 +58,9 @@ function MealPlanWelcomeDialog({
           <CalendarDays size={32} />
         </span>
         <p>
-          검수된 한국 가정식 30일 저녁 식단과
-          메뉴별 상세 레시피를 인터넷 연결 없이
-          이용할 수 있어요.
+          오늘부터 바로 시작할 수 있는 30일 기본
+          식단을 준비했어요. 메뉴별 상세 레시피도
+          인터넷 연결 없이 볼 수 있어요.
         </p>
         <p className="meal-plan-welcome__note">
           이미 저장한 식단은 자동으로 바꾸지 않아요.

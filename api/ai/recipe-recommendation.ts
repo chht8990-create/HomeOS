@@ -17,10 +17,11 @@ import type {
 const OPENAI_RESPONSES_URL =
   'https://api.openai.com/v1/responses'
 const DEFAULT_MODEL = 'gpt-5.6-luna'
-const SERVER_TIMEOUT_MS = 12_000
-const MAX_OUTPUT_TOKENS = 1_800
+const SERVER_TIMEOUT_MS = 20_000
+const MAX_OUTPUT_TOKENS = 6_000
 const MAX_REQUEST_BYTES = 20_000
-const MAX_RESPONSE_BYTES = 100_000
+const MAX_RESPONSE_BYTES = 250_000
+const MAX_UPSTREAM_RETRIES = 1
 const DUPLICATE_WINDOW_MS = 30_000
 const MAX_CACHE_ENTRIES = 25
 const MAX_ERROR_FIELD_LENGTH = 120
@@ -93,6 +94,25 @@ const responseSchema = {
             minimum: AI_MIN_ESTIMATED_MINUTES,
             maximum: AI_MAX_ESTIMATED_MINUTES,
           },
+          difficulty: {
+            type: 'string',
+            enum: ['쉬움', '보통', '어려움'],
+          },
+          prepTimeMinutes: {
+            type: 'integer',
+            minimum: 0,
+            maximum: 120,
+          },
+          cookTimeMinutes: {
+            type: 'integer',
+            minimum: 5,
+            maximum: 180,
+          },
+          calories: {
+            type: ['integer', 'null'],
+            minimum: 1,
+            maximum: 5000,
+          },
           ingredients: {
             type: 'array',
             minItems: 1,
@@ -118,12 +138,42 @@ const responseSchema = {
                 available: {
                   type: 'boolean',
                 },
+                group: {
+                  type: 'string',
+                  enum: [
+                    'main',
+                    'seasoning',
+                    'broth',
+                    'garnish',
+                    'optional',
+                  ],
+                },
+                note: {
+                  type: ['string', 'null'],
+                  maxLength: 120,
+                },
+                optional: {
+                  type: 'boolean',
+                },
+                substitute: {
+                  type: 'array',
+                  maxItems: 4,
+                  items: {
+                    type: 'string',
+                    minLength: 1,
+                    maxLength: 80,
+                  },
+                },
               },
               required: [
                 'name',
                 'quantity',
                 'unit',
                 'available',
+                'group',
+                'note',
+                'optional',
+                'substitute',
               ],
             },
           },
@@ -154,12 +204,122 @@ const responseSchema = {
           },
           steps: {
             type: 'array',
-            minItems: 1,
+            minItems: 8,
             maxItems: 12,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                order: {
+                  type: 'integer',
+                  minimum: 1,
+                  maximum: 12,
+                },
+                title: {
+                  type: 'string',
+                  minLength: 1,
+                  maxLength: 80,
+                },
+                instruction: {
+                  type: 'string',
+                  minLength: 1,
+                  maxLength: 400,
+                },
+                durationMinutes: {
+                  type: 'integer',
+                  minimum: 1,
+                  maximum: 180,
+                },
+                heatLevel: {
+                  type: 'string',
+                  minLength: 1,
+                  maxLength: 40,
+                },
+                completionCue: {
+                  type: 'string',
+                  minLength: 1,
+                  maxLength: 180,
+                },
+                reason: {
+                  type: ['string', 'null'],
+                  maxLength: 180,
+                },
+                warning: {
+                  type: ['string', 'null'],
+                  maxLength: 180,
+                },
+                ingredientRefs: {
+                  type: 'array',
+                  minItems: 1,
+                  maxItems: AI_MAX_INVENTORY_ITEMS,
+                  items: {
+                    type: 'string',
+                    minLength: 1,
+                    maxLength: 80,
+                  },
+                },
+              },
+              required: [
+                'order',
+                'title',
+                'instruction',
+                'durationMinutes',
+                'heatLevel',
+                'completionCue',
+                'reason',
+                'warning',
+                'ingredientRefs',
+              ],
+            },
+          },
+          seasoningAdjustment: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 4,
             items: {
               type: 'string',
               minLength: 1,
-              maxLength: 300,
+              maxLength: 180,
+            },
+          },
+          commonMistakes: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 4,
+            items: {
+              type: 'string',
+              minLength: 1,
+              maxLength: 180,
+            },
+          },
+          storage: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 240,
+          },
+          reheating: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 240,
+          },
+          leftoverIdeas: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 4,
+            items: {
+              type: 'string',
+              minLength: 1,
+              maxLength: 180,
+            },
+          },
+          servingSuggestions: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 4,
+            items: {
+              type: 'string',
+              minLength: 1,
+              maxLength: 180,
             },
           },
         },
@@ -168,9 +328,19 @@ const responseSchema = {
           'summary',
           'servings',
           'estimatedMinutes',
+          'difficulty',
+          'prepTimeMinutes',
+          'cookTimeMinutes',
+          'calories',
           'ingredients',
           'missingIngredients',
           'steps',
+          'seasoningAdjustment',
+          'commonMistakes',
+          'storage',
+          'reheating',
+          'leftoverIdeas',
+          'servingSuggestions',
         ],
       },
     },
@@ -207,13 +377,31 @@ function cloneResponse(
       (recommendation) => ({
         ...recommendation,
         ingredients: recommendation.ingredients.map(
-          (ingredient) => ({ ...ingredient }),
+          (ingredient) => ({
+            ...ingredient,
+            substitute: [...ingredient.substitute],
+          }),
         ),
         missingIngredients:
           recommendation.missingIngredients.map(
             (ingredient) => ({ ...ingredient }),
           ),
-        steps: [...recommendation.steps],
+        steps: recommendation.steps.map((step) => ({
+          ...step,
+          ingredientRefs: [...step.ingredientRefs],
+        })),
+        seasoningAdjustment: [
+          ...recommendation.seasoningAdjustment,
+        ],
+        commonMistakes: [
+          ...recommendation.commonMistakes,
+        ],
+        leftoverIdeas: [
+          ...recommendation.leftoverIdeas,
+        ],
+        servingSuggestions: [
+          ...recommendation.servingSuggestions,
+        ],
       }),
     ),
     meta: { ...response.meta },
@@ -263,12 +451,16 @@ function buildPrompt(
 ) {
   return JSON.stringify({
     task:
-      '아래 냉장고 재료를 최대한 활용해 가족이 함께 먹기 좋은 한국 가정식 메뉴를 한국어로 1~3개 추천하세요.',
+      '아래 냉장고 재료를 최대한 활용해 인터넷 검색 없이 그대로 조리할 수 있는 한국 가정식 메뉴를 한국어로 1~3개 추천하세요.',
     rules: [
       '재료 이름과 단위는 정확히 비교하고 단위를 변환하지 마세요.',
+      '인분 수에 맞춰 주재료, 양념, 물과 육수, 고명까지 빠짐없이 정확한 수량과 단위를 쓰세요.',
+      '모든 재료에 그룹을 지정하고 조리 단계 ingredientRefs에는 재료 목록의 이름만 정확히 사용하세요.',
+      '물과 육수는 반드시 ml 단위로 쓰고 양념도 생략하지 마세요.',
+      '조리 단계는 8~12개로 나누고 매 단계에 시간, 불 세기, 눈으로 확인할 완성 기준을 쓰세요.',
+      '간 조절, 자주 하는 실수, 보관, 재가열, 남은 음식 활용, 곁들이기 정보를 모두 제공하세요.',
       '인분 수를 반영하고 부족 재료는 꼭 필요한 것만 일반 가정에서 구하기 쉬운 재료로 제한하세요.',
       '선호 조건을 참고하고 제외 재료는 재료·양념·고명에 절대 사용하지 마세요.',
-      '전문 조리도구 없이 따라 하기 쉬운 짧은 단계로 작성하세요.',
       '생고기와 달걀 등은 속까지 충분히 익히도록 안전하게 안내하세요.',
       '개인정보를 추론하거나 요청하지 마세요.',
     ],
@@ -528,6 +720,81 @@ function hasIngredient(
   )
 }
 
+function createMockPremiumDetails(
+  ingredientNames: string[],
+  estimatedMinutes: number,
+): Pick<
+  AiRecipeRecommendation,
+  | 'difficulty'
+  | 'prepTimeMinutes'
+  | 'cookTimeMinutes'
+  | 'calories'
+  | 'steps'
+  | 'seasoningAdjustment'
+  | 'commonMistakes'
+  | 'storage'
+  | 'reheating'
+  | 'leftoverIdeas'
+  | 'servingSuggestions'
+> {
+  const prepTimeMinutes = Math.min(
+    10,
+    Math.max(5, estimatedMinutes - 10),
+  )
+
+  return {
+    difficulty: '쉬움',
+    prepTimeMinutes,
+    cookTimeMinutes:
+      estimatedMinutes - prepTimeMinutes,
+    calories: null,
+    steps: Array.from({ length: 8 }, (_, index) => ({
+      order: index + 1,
+      title: `${index + 1}단계`,
+      instruction:
+        index === 7
+          ? '모든 재료의 익힘을 확인하고 그릇에 담아요.'
+          : `${ingredientNames[index % ingredientNames.length]}을(를) 순서에 맞춰 안전하게 조리해요.`,
+      durationMinutes: Math.max(
+        1,
+        Math.round(estimatedMinutes / 8),
+      ),
+      heatLevel:
+        index < 2 ? '불 사용 안 함' : '중불',
+      completionCue:
+        index === 7
+          ? '재료 중심까지 충분히 익고 간이 고르게 어우러져요.'
+          : '재료의 색과 질감이 단계 설명에 맞게 변해요.',
+      reason: null,
+      warning:
+        index === 6
+          ? '달걀과 고기는 중심까지 충분히 익혀요.'
+          : null,
+      ingredientRefs: [
+        ingredientNames[
+          index % ingredientNames.length
+        ],
+      ],
+    })),
+    seasoningAdjustment: [
+      '완성 직전 맛을 보고 간장은 조금씩 추가해요.',
+    ],
+    commonMistakes: [
+      '팬이 충분히 달궈지기 전에 재료를 한꺼번에 넣지 않아요.',
+    ],
+    storage:
+      '완전히 식혀 밀폐 용기에 담아 냉장 1일 보관해요.',
+    reheating:
+      '먹을 만큼 덜어 중심까지 충분히 뜨거워지도록 데워요.',
+    leftoverIdeas: [
+      '남은 음식은 밥과 함께 볶아 한 그릇으로 활용해요.',
+    ],
+    servingSuggestions: [
+      '제철 채소 반찬과 함께 따뜻하게 내요.',
+    ],
+  }
+}
+
 function createMockRecommendation(
   input: AiRecipeRecommendationRequest,
   recipe: Omit<
@@ -544,6 +811,10 @@ function createMockRecommendation(
   const ingredients = recipe.ingredients.map(
     (ingredient) => ({
       ...ingredient,
+      group: 'main' as const,
+      note: null,
+      optional: false,
+      substitute: [],
       available: hasIngredient(
         input.inventoryItems,
         ingredient.name,
@@ -580,16 +851,15 @@ async function createMockResponse(
         '냉장고 속 재료를 가볍게 볶아 만드는 든든한 한 끼예요.',
       servings: input.servings,
       estimatedMinutes: 20,
+      ...createMockPremiumDetails(
+        ['계란', '밥', '대파', '간장'],
+        20,
+      ),
       ingredients: [
         { name: '계란', quantity: 2, unit: '개' },
         { name: '밥', quantity: 2, unit: '공기' },
         { name: '대파', quantity: 1, unit: '대' },
         { name: '간장', quantity: 1, unit: '큰술' },
-      ],
-      steps: [
-        '대파를 잘게 썰고 계란을 풀어 준비해요.',
-        '팬에 대파와 밥을 볶은 뒤 간장으로 간해요.',
-        '계란을 넣고 고루 익혀 마무리해요.',
       ],
     }),
     createMockRecommendation(input, {
@@ -598,16 +868,15 @@ async function createMockResponse(
         '부드러운 두부와 달걀을 따뜻하게 즐기는 가족 메뉴예요.',
       servings: input.servings,
       estimatedMinutes: 25,
+      ...createMockPremiumDetails(
+        ['두부', '계란', '밥', '간장'],
+        25,
+      ),
       ingredients: [
         { name: '두부', quantity: 1, unit: '모' },
         { name: '계란', quantity: 2, unit: '개' },
         { name: '밥', quantity: 2, unit: '공기' },
         { name: '간장', quantity: 1, unit: '큰술' },
-      ],
-      steps: [
-        '두부의 물기를 빼고 먹기 좋은 크기로 잘라요.',
-        '두부를 노릇하게 익힌 뒤 풀어둔 계란을 넣어요.',
-        '간장으로 간하고 밥 위에 올려요.',
       ],
     }),
     createMockRecommendation(input, {
@@ -616,16 +885,15 @@ async function createMockResponse(
         '남은 채소를 한 그릇에 모아 간단히 완성하는 메뉴예요.',
       servings: input.servings,
       estimatedMinutes: 15,
+      ...createMockPremiumDetails(
+        ['밥', '당근', '계란', '고추장'],
+        15,
+      ),
       ingredients: [
         { name: '밥', quantity: 2, unit: '공기' },
         { name: '당근', quantity: 1, unit: '개' },
         { name: '계란', quantity: 2, unit: '개' },
         { name: '고추장', quantity: 1, unit: '큰술' },
-      ],
-      steps: [
-        '채소를 가늘게 썰어 가볍게 볶아요.',
-        '그릇에 밥과 채소를 담고 계란을 올려요.',
-        '고추장을 곁들여 골고루 비벼요.',
       ],
     }),
   ]
@@ -636,6 +904,40 @@ async function createMockResponse(
       maxRecommendations: AI_MAX_RECOMMENDATIONS,
     },
   }
+}
+
+async function fetchOpenAiWithRetry(
+  init: RequestInit,
+) {
+  let lastError: unknown
+
+  for (
+    let attempt = 0;
+    attempt <= MAX_UPSTREAM_RETRIES;
+    attempt += 1
+  ) {
+    try {
+      const response = await fetch(
+        OPENAI_RESPONSES_URL,
+        init,
+      )
+
+      if (
+        response.status < 500 ||
+        attempt === MAX_UPSTREAM_RETRIES
+      ) {
+        return response
+      }
+    } catch (error) {
+      lastError = error
+
+      if (attempt === MAX_UPSTREAM_RETRIES) {
+        throw error
+      }
+    }
+  }
+
+  throw lastError ?? new Error('OpenAI request failed.')
 }
 
 async function requestOpenAi(
@@ -675,9 +977,8 @@ async function requestOpenAi(
   )
 
   try {
-    const openAiResponse = await fetch(
-      OPENAI_RESPONSES_URL,
-      {
+    const openAiResponse =
+      await fetchOpenAiWithRetry({
         method: 'POST',
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -690,7 +991,7 @@ async function requestOpenAi(
             {
               role: 'system',
               content:
-                'HomeOS의 가족 식사 추천 도우미입니다. 제공된 음식 재료만 분석하고 strict JSON schema를 따르세요.',
+                '오늘식탁의 가족 레시피 편집자입니다. 제공된 음식 재료만 분석하고 strict JSON schema를 정확히 따르세요.',
             },
             {
               role: 'user',
@@ -708,7 +1009,7 @@ async function requestOpenAi(
             verbosity: 'low',
             format: {
               type: 'json_schema',
-              name: 'homeos_recipe_recommendations',
+              name: 'today_table_recipe_recommendations',
               strict: true,
               schema: responseSchema,
             },
@@ -716,8 +1017,7 @@ async function requestOpenAi(
           max_output_tokens: MAX_OUTPUT_TOKENS,
         }),
         signal: abortController.signal,
-      },
-    )
+      })
 
     const responseText = await openAiResponse.text()
 

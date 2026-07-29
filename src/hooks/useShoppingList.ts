@@ -9,6 +9,17 @@ import {
 import {
   mergeCompletedShoppingIntoInventory,
 } from '../services/shoppingInventoryEngine'
+import {
+  deleteShoppingItems,
+  getShoppingReminderItems,
+  markShoppingItemsForReminder,
+  normalizeShoppingItem,
+  normalizeStoredShoppingItem,
+  readRequiredShoppingQuantity,
+  restoreShoppingReminderItems,
+  updateShoppingPurchase,
+  type ShoppingPurchaseInput,
+} from '../services/shoppingPurchaseEngine'
 import type { Ingredient } from '../types/ingredient'
 import type { ShoppingItem } from '../types/shopping'
 import {
@@ -41,10 +52,12 @@ function readItems(): ShoppingItem[] {
       return []
     }
 
-    return parsedValue.map((item) => ({
-      ...item,
-      source: item.source ?? 'manual',
-    }))
+    return parsedValue.flatMap((item) => {
+      const normalizedItem =
+        normalizeStoredShoppingItem(item)
+
+      return normalizedItem ? [normalizedItem] : []
+    })
   } catch {
     window.localStorage.removeItem(STORAGE_KEY)
     return []
@@ -69,8 +82,15 @@ function useShoppingList() {
   }, [])
 
   function saveItems(nextItems: ShoppingItem[]) {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextItems))
-    setItems(nextItems)
+    const normalizedItems = nextItems.map(
+      normalizeShoppingItem,
+    )
+
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(normalizedItems),
+    )
+    setItems(normalizedItems)
     window.dispatchEvent(new Event(CHANGE_EVENT))
   }
 
@@ -178,30 +198,76 @@ function useShoppingList() {
     completed: boolean,
   ) {
     const currentItems = readItems()
-    const itemIdSet = new Set(itemIds)
     const now = new Date().toISOString()
+    const selectedItems = currentItems.filter((item) =>
+      itemIds.includes(item.id),
+    )
+    const requiredQuantity = selectedItems.reduce(
+      (sum, item) =>
+        sum + readRequiredShoppingQuantity(item),
+      0,
+    )
 
     saveItems(
-      currentItems.map((item) =>
-        itemIdSet.has(item.id) &&
-        item.completed !== completed
-          ? {
-              ...item,
-              completed,
-              updatedAt: now,
-            }
-          : item,
+      updateShoppingPurchase(
+        currentItems,
+        itemIds,
+        {
+          mode: 'single',
+          purchasedQuantity: completed
+            ? requiredQuantity
+            : 0,
+        },
+        now,
+      ),
+    )
+  }
+
+  function recordPurchase(
+    itemIds: string[],
+    input: ShoppingPurchaseInput,
+  ) {
+    saveItems(
+      updateShoppingPurchase(
+        readItems(),
+        itemIds,
+        input,
+        new Date().toISOString(),
+      ),
+    )
+  }
+
+  function markItemsNotPurchased(itemIds: string[]) {
+    recordPurchase(itemIds, {
+      mode: 'single',
+      purchasedQuantity: 0,
+      notPurchased: true,
+    })
+  }
+
+  function restoreReminderItemIds(itemIds: string[]) {
+    saveItems(
+      restoreShoppingReminderItems(
+        readItems(),
+        itemIds,
+        new Date().toISOString(),
+      ),
+    )
+  }
+
+  function markItemIdsForReminder(itemIds: string[]) {
+    saveItems(
+      markShoppingItemsForReminder(
+        readItems(),
+        itemIds,
+        new Date().toISOString(),
       ),
     )
   }
 
   function deleteItems(itemIds: string[]) {
-    const itemIdSet = new Set(itemIds)
-
     saveItems(
-      readItems().filter(
-        (item) => !itemIdSet.has(item.id),
-      ),
+      deleteShoppingItems(readItems(), itemIds),
     )
   }
 
@@ -211,7 +277,9 @@ function useShoppingList() {
     )
   }
 
-  function applyCompletedItemsToInventory() {
+  function applyCompletedItemsToInventory(
+    itemIds?: string[],
+  ) {
     const currentItems = readItems()
     const result =
       mergeCompletedShoppingIntoInventory(
@@ -220,6 +288,7 @@ function useShoppingList() {
         {
           createId: createInventoryId,
           now: new Date().toISOString(),
+          shoppingItemIds: itemIds,
         },
       )
 
@@ -229,29 +298,30 @@ function useShoppingList() {
 
     writeInventoryItems(result.inventoryItems)
 
-    const appliedItemIdSet = new Set(
-      result.appliedShoppingItemIds,
-    )
-
-    saveItems(
-      currentItems.filter(
-        (item) => !appliedItemIdSet.has(item.id),
-      ),
-    )
+    saveItems(result.shoppingItems)
 
     return result.appliedItemCount
   }
 
   return {
     items,
-    remainingItems: items.filter((item) => !item.completed),
+    remainingItems: items.filter(
+      (item) =>
+        item.purchaseStatus !== 'not-purchased' &&
+        !item.completed,
+    ),
     completedItems: items.filter((item) => item.completed),
+    reminderItems: getShoppingReminderItems(items),
     addItem,
     addIngredientItems,
     addMealItems,
     removeMealItems,
     replaceMealPlanRangeItems,
     setItemsCompleted,
+    recordPurchase,
+    markItemsNotPurchased,
+    markItemIdsForReminder,
+    restoreReminderItemIds,
     deleteItems,
     clearCompletedItems,
     applyCompletedItemsToInventory,

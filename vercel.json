@@ -3,9 +3,26 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "headers": [
+    {
+      "source": "/sw.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    }
+  ],
   "functions": {
     "api/ai/recipe-recommendation.ts": {
       "maxDuration": 15
+    },
+    "api/ai/meal-plan-trial.ts": {
+      "maxDuration": 35
+    },
+    "api/ai/meal-plan-recipe-detail.ts": {
+      "maxDuration": 35
     }
   },
   "rewrites": [
