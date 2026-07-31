@@ -1,5 +1,6 @@
 import {
   parseAiMealPlanDraftOutput,
+  parseAiMealPlanDraftOutputResult,
   validateAiMealPlanTrialRequest,
 } from '../../src/services/aiMealPlanTrialEngine.js'
 import type {
@@ -337,8 +338,8 @@ const responseSchema = {
           },
           name: {
             type: 'string',
-            minLength: 1,
-            maxLength: 80,
+            minLength: 2,
+            maxLength: 12,
           },
           summary: {
             type: 'string',
@@ -438,11 +439,18 @@ function buildPrompt(
       '한국 가정에서 가족이 함께 먹기 좋은 저녁 식단 7일 초안을 한국어로 만드세요.',
     rules: [
       '7일의 메뉴와 주재료가 연속으로 반복되지 않게 하세요.',
+      '같은 7일 안에서는 동일 메뉴를 절대 반복하지 마세요.',
+      '최근 14일 메뉴와 같은 메뉴는 만들지 마세요.',
+      '국·찌개, 볶음, 구이, 조림, 밥·면 등 최소 4가지 조리 유형을 섞고 같은 조리 유형은 최대 2개만 사용하세요.',
       '평일 메뉴는 사용자가 정한 최대 조리시간을 넘기지 말고 주말은 조금 길어도 됩니다.',
       '냉장고 재료를 최대한 활용하고 부족 재료를 불필요하게 늘리지 마세요.',
       '제외 음식과 알레르기는 메뉴, 주요 재료, 부족 재료에 절대 사용하지 마세요.',
       '아이 포함 시 연령대와 맵기 선호를 반영하세요.',
       '일반 가정에서 구하기 쉬운 재료와 도구를 사용하세요.',
+      'name에는 한국 가정에서 실제로 쓰는 표준 음식명만 2~12자로 적으세요.',
+      'name에 밥·반찬·채소를 “와/과”로 덧붙이거나 재료 목록, 조리 설명, “없는” 같은 조건 문장을 넣지 마세요.',
+      '메뉴 설명과 추천 이유는 name이 아니라 summary와 recommendationReason에 분리하세요.',
+      '특정 예시 메뉴를 반복하지 말고 조건에 맞는 익숙한 한국 가정식 이름을 고르세요.',
       '이 단계에서는 상세 재료 수량, 조리 단계, 불 세기, 보관과 재가열 정보를 생성하지 마세요.',
       'mainIngredientNames에는 메뉴를 대표하는 재료명만, missingIngredientNames에는 현재 재고에 없는 재료명만 적으세요.',
       'constraintCompliance에는 제외 음식, 알레르기, 아이와 맵기 조건을 어떻게 지켰는지 한 문장으로 적으세요.',
@@ -457,6 +465,7 @@ function buildPrompt(
     allergies: request.allergies ?? '',
     weekdayMaxMinutes: request.weekdayMaxMinutes,
     inventoryItems: request.inventoryItems,
+    recentMenuNames: request.recentMenuNames ?? [],
   })
 }
 
@@ -537,20 +546,39 @@ function readUsage(value: unknown): AiUsage | null {
 }
 
 function logInvocation(
+  traceId: string | undefined,
   model: string,
   success: boolean,
   startedAt: number,
   usage: AiUsage | null,
+  failure?: {
+    code: string
+    reason?: string
+    dayIndex?: number
+  },
 ) {
   console.info(
     '[today-table-ai-meal-plan-trial]',
     JSON.stringify({
+      traceId: traceId ?? 'untracked',
+      stage: 'DRAFT_GENERATION',
       model,
       inputTokens: usage?.inputTokens ?? null,
       outputTokens: usage?.outputTokens ?? null,
       totalTokens: usage?.totalTokens ?? null,
       success,
       durationMs: Date.now() - startedAt,
+      ...(failure
+        ? {
+            failureCode: failure.code,
+            ...(failure.reason
+              ? { failureReason: failure.reason }
+              : {}),
+            ...(failure.dayIndex
+              ? { dayIndex: failure.dayIndex }
+              : {}),
+          }
+        : {}),
     }),
   )
 }
@@ -575,7 +603,7 @@ function mapUpstreamError(status: number) {
   if (status === 400) {
     return {
       status: 400,
-      code: 'AI_REQUEST_REJECTED',
+      code: 'API_REQUEST_FAILED',
       message:
         '맞춤 식단 요청 형식을 확인해 주세요.',
     }
@@ -584,7 +612,7 @@ function mapUpstreamError(status: number) {
   if (status === 401 || status === 403) {
     return {
       status,
-      code: 'AI_NOT_CONFIGURED',
+      code: 'API_REQUEST_FAILED',
       message:
         '현재 AI 맞춤 식단 설정을 확인하고 있어요.',
     }
@@ -593,7 +621,7 @@ function mapUpstreamError(status: number) {
   if (status === 429) {
     return {
       status: 429,
-      code: 'AI_LIMIT_REACHED',
+      code: 'OPENAI_RATE_LIMIT',
       message:
         'AI 사용 한도에 도달했어요. 잠시 후 다시 시도해 주세요.',
     }
@@ -601,7 +629,7 @@ function mapUpstreamError(status: number) {
 
   return {
     status: status >= 500 ? 503 : 502,
-    code: 'AI_SERVICE_UNAVAILABLE',
+    code: 'API_REQUEST_FAILED',
     message:
       'AI 서비스가 잠시 불안정해요. 무료 체험은 사용 처리되지 않았어요.',
   }
@@ -617,13 +645,13 @@ function createMockResponse(
   request: AiMealPlanTrialRequest,
 ) {
   const menuNames = [
-    '순한 김치 두부찌개',
-    '고등어 무조림',
-    '소고기 미역국',
-    '닭고기 감자조림',
-    '계란 채소덮밥',
-    '연어 채소구이',
-    '소고기 채소카레',
+    '김치찌개',
+    '고등어구이',
+    '소고기미역국',
+    '닭갈비',
+    '계란볶음밥',
+    '카레',
+    '두부조림',
   ]
   const parsedResponse =
     parseAiMealPlanDraftOutput(
@@ -739,13 +767,22 @@ async function requestOpenAi(
   )
   let usage: AiUsage | null = null
   let invocationLogged = false
-  const finishInvocation = (success: boolean) => {
+  const finishInvocation = (
+    success: boolean,
+    failure?: {
+      code: string
+      reason?: string
+      dayIndex?: number
+    },
+  ) => {
     if (!invocationLogged) {
       logInvocation(
+        request.traceId,
         model,
         success,
         startedAt,
         usage,
+        failure,
       )
       invocationLogged = true
     }
@@ -830,11 +867,12 @@ async function requestOpenAi(
           ),
         }),
       )
-      finishInvocation(false)
-
       const mappedError = mapUpstreamError(
         openAiResponse.status,
       )
+      finishInvocation(false, {
+        code: mappedError.code,
+      })
       return createErrorResponse(
         mappedError.code,
         mappedError.message,
@@ -843,9 +881,11 @@ async function requestOpenAi(
     }
 
     if (responseText.length > MAX_RESPONSE_BYTES) {
-      finishInvocation(false)
+      finishInvocation(false, {
+        code: 'OPENAI_RESPONSE_INVALID',
+      })
       return createErrorResponse(
-        'AI_RESPONSE_INVALID',
+        'OPENAI_RESPONSE_INVALID',
         '맞춤 식단 결과가 너무 커서 읽지 못했어요.',
         502,
       )
@@ -857,9 +897,11 @@ async function requestOpenAi(
       rawResponse = JSON.parse(responseText)
       usage = readUsage(rawResponse)
     } catch {
-      finishInvocation(false)
+      finishInvocation(false, {
+        code: 'JSON_PARSE_FAILED',
+      })
       return createErrorResponse(
-        'AI_RESPONSE_INVALID',
+        'JSON_PARSE_FAILED',
         '맞춤 식단 결과를 안전하게 읽지 못했어요.',
         502,
       )
@@ -869,9 +911,11 @@ async function requestOpenAi(
       extractResponseText(rawResponse)
 
     if (!structuredText) {
-      finishInvocation(false)
+      finishInvocation(false, {
+        code: 'OPENAI_RESPONSE_INVALID',
+      })
       return createErrorResponse(
-        'AI_RESPONSE_INVALID',
+        'OPENAI_RESPONSE_INVALID',
         '맞춤 식단 결과가 비어 있어요.',
         502,
       )
@@ -884,28 +928,49 @@ async function requestOpenAi(
         structuredText,
       )
     } catch {
-      finishInvocation(false)
+      finishInvocation(false, {
+        code: 'JSON_PARSE_FAILED',
+      })
       return createErrorResponse(
-        'AI_RESPONSE_INVALID',
+        'JSON_PARSE_FAILED',
         '맞춤 식단 결과 형식이 올바르지 않아요.',
         502,
       )
     }
 
-    const parsedResponse =
-      parseAiMealPlanDraftOutput(
+    const parseResult =
+      parseAiMealPlanDraftOutputResult(
         structuredOutput,
         request,
       )
 
-    if (!parsedResponse) {
-      finishInvocation(false)
+    if (!parseResult.ok) {
+      const responseCode =
+        parseResult.reason ===
+        'MENU_NAME_INVALID'
+          ? 'MENU_NAME_INVALID'
+          : parseResult.reason ===
+                'DUPLICATE_MENU' ||
+              parseResult.reason ===
+                'RECENT_MENU_DUPLICATE' ||
+              parseResult.reason ===
+                'DIVERSITY_VIOLATION'
+            ? 'MENU_DIVERSITY_INVALID'
+          : 'OPENAI_RESPONSE_INVALID'
+      finishInvocation(false, {
+        code: responseCode,
+        reason: parseResult.reason,
+        ...(parseResult.dayIndex
+          ? { dayIndex: parseResult.dayIndex }
+          : {}),
+      })
       return createErrorResponse(
-        'AI_RESPONSE_INVALID',
+        responseCode,
         '맞춤 식단이 입력 조건을 충족하지 못했어요. 무료 체험은 사용 처리되지 않았어요.',
         502,
       )
     }
+    const parsedResponse = parseResult.data
 
     parsedResponse.meta.model = model
     parsedResponse.meta.durationMs =
@@ -920,17 +985,22 @@ async function requestOpenAi(
     finishInvocation(true)
     return jsonResponse(parsedResponse)
   } catch (error) {
-    finishInvocation(false)
-
-    return error instanceof DOMException &&
+    const isTimeout =
+      error instanceof DOMException &&
       error.name === 'AbortError'
+    const code = isTimeout
+      ? 'OPENAI_TIMEOUT'
+      : 'API_REQUEST_FAILED'
+    finishInvocation(false, { code })
+
+    return isTimeout
       ? createErrorResponse(
-          'AI_TRIAL_TIMEOUT',
+          code,
           '맞춤 식단 생성 시간이 길어졌어요. 무료 체험은 사용 처리되지 않았어요.',
           504,
         )
       : createErrorResponse(
-          'AI_NETWORK_ERROR',
+          code,
           'AI 서비스에 연결하지 못했어요. 무료 체험은 사용 처리되지 않았어요.',
           502,
         )
@@ -991,7 +1061,7 @@ export async function handleAiMealPlanTrial(
     requestBody = JSON.parse(requestText)
   } catch {
     return createErrorResponse(
-      'INVALID_REQUEST',
+      'INPUT_INVALID',
       '요청 JSON이 올바르지 않습니다.',
       400,
     )
@@ -1002,7 +1072,7 @@ export async function handleAiMealPlanTrial(
 
   if (!validation.ok) {
     return createErrorResponse(
-      validation.code,
+      'INPUT_INVALID',
       validation.message,
       400,
     )

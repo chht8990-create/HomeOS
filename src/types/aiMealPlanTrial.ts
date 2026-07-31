@@ -9,6 +9,7 @@ export type SpicePreference =
   | 'spicy'
 
 export type AiMealPlanTrialRequest = {
+  traceId?: string
   startDate: string
   householdSize: number
   includesChildren: boolean
@@ -19,6 +20,7 @@ export type AiMealPlanTrialRequest = {
   allergies?: string
   weekdayMaxMinutes: number
   inventoryItems: AiInventoryIngredient[]
+  recentMenuNames?: string[]
 }
 
 export type AiMealPlanDraftDay = {
@@ -57,6 +59,7 @@ export type AiMealPlanDraftResponse = {
 }
 
 export type AiMealPlanRecipeDetailRequest = {
+  traceId?: string
   day: AiMealPlanDraftDay
   householdSize: number
   includesChildren: boolean

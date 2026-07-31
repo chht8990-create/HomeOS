@@ -8,6 +8,10 @@ export type PlannerShoppingChange = {
   sourceId: string
   previousSourceId?: string
   ingredients: Ingredient[] | null
+  sourceRecipeId?: string
+  sourceRecipeName?: string
+  sourceMealDate: string
+  sourceMealTime: string
 }
 
 export function createPlannerShoppingSourceId(
@@ -50,5 +54,13 @@ export function createPlannerShoppingChange(
         ? undefined
         : previousSourceId,
     ingredients: recipe?.ingredients ?? null,
+    ...(recipe
+      ? {
+          sourceRecipeId: recipe.id,
+          sourceRecipeName: recipe.name,
+        }
+      : {}),
+    sourceMealDate: savedMealPlan.date,
+    sourceMealTime: savedMealPlan.type,
   }
 }

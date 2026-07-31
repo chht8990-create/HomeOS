@@ -1,4 +1,4 @@
-const RELEASE_VERSION = '1.0.1'
+const RELEASE_VERSION = '1.0.2'
 const CACHE_PREFIX = 'today-table'
 const DEPLOYMENT_SCOPE =
   self.location.hostname === 'home-os-one.vercel.app'

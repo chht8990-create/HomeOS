@@ -7,6 +7,7 @@ import './App.css'
 import BrandSplash from './components/BrandSplash'
 import FirstRunTutorial from './components/FirstRunTutorial'
 import MealPlanWelcomeDialog from './components/MealPlanWelcomeDialog'
+import Toast from './components/ui/Toast'
 import BottomNavigation, {
   type PageName,
 } from './components/BottomNavigation'
@@ -14,6 +15,11 @@ import useShoppingList from './hooks/useShoppingList'
 import useMealPlan from './hooks/useMealPlan'
 import useRecipes from './hooks/useRecipes'
 import useTutorialSettings from './hooks/useTutorialSettings'
+import {
+  hasActiveHistoryModal,
+  HISTORY_MODAL_CHANGE_EVENT,
+} from './hooks/useHistoryModal'
+import FeedbackPage from './pages/FeedbackPage'
 import GuidePage from './pages/GuidePage'
 import InventoryPage from './pages/InventoryPage'
 import HomePage from './pages/HomePage'
@@ -26,14 +32,19 @@ import { createDefaultMonthlyMealPlans } from './services/defaultMealPlanEngine'
 import {
   createNavigationState,
   createNavigationUrl,
+  createPwaExitGuardState,
+  isPwaExitGuardState,
   isSameNavigationTarget,
+  isTopLevelNavigationState,
   planTopLevelNavigation,
   readNavigationState,
+  shouldUsePwaBackExit,
   type AppNavigationState,
 } from './services/appNavigationEngine'
 
 const MEAL_PLAN_WELCOME_STORAGE_KEY =
   'today-table.mealPlanWelcome.v1'
+const PWA_BACK_EXIT_TIMEOUT_MS = 2_000
 
 function getTodayDateKey() {
   const today = new Date()
@@ -78,6 +89,10 @@ type RecipeMatchedEventDetail = {
   sourceId: string
   previousSourceId?: string
   ingredients: Ingredient[]
+  sourceRecipeId?: string
+  sourceRecipeName?: string
+  sourceMealDate?: string
+  sourceMealTime?: string
 }
 
 type MealClearedEventDetail = {
@@ -105,6 +120,8 @@ function App() {
   const plannerRecipeName =
     navigation.plannerRecipeName
   const openAiTrial = navigation.openAiTrial
+  const showInventoryRecommendations =
+    navigation.showInventoryRecommendations
   const {
     doNotShowAgain,
     completeTutorial,
@@ -137,6 +154,24 @@ function App() {
   const historyInitializedRef = useRef(false)
   const isTopLevelHistoryTravelingRef =
     useRef(false)
+  const isStandalonePwaRef = useRef(
+    shouldUsePwaBackExit(
+      window.matchMedia(
+        '(display-mode: standalone)',
+      ).matches,
+      (navigator as Navigator & {
+        standalone?: boolean
+      }).standalone === true,
+    ),
+  )
+  const backExitPendingRef = useRef(false)
+  const backExitTimeoutRef =
+    useRef<number | null>(null)
+  const exitGuardActiveRef = useRef(
+    isPwaExitGuardState(window.history.state),
+  )
+  const [isBackExitToastVisible, setIsBackExitToastVisible] =
+    useState(false)
   const pageContainerRef =
     useRef<HTMLDivElement>(null)
   const previousLocationRef = useRef(
@@ -152,6 +187,50 @@ function App() {
     replaceAllMealPlans,
   } = useMealPlan()
   const { recipes } = useRecipes()
+
+  function resetBackExitPending() {
+    backExitPendingRef.current = false
+    setIsBackExitToastVisible(false)
+
+    if (backExitTimeoutRef.current !== null) {
+      window.clearTimeout(
+        backExitTimeoutRef.current,
+      )
+      backExitTimeoutRef.current = null
+    }
+  }
+
+  function ensurePwaExitGuard(
+    nextNavigation: AppNavigationState,
+  ) {
+    if (
+      !isStandalonePwaRef.current ||
+      !isTopLevelNavigationState(
+        nextNavigation,
+      ) ||
+      isPwaExitGuardState(
+        window.history.state,
+      )
+    ) {
+      exitGuardActiveRef.current =
+        isPwaExitGuardState(
+          window.history.state,
+        )
+      return
+    }
+
+    window.history.pushState(
+      createPwaExitGuardState(
+        nextNavigation,
+      ),
+      '',
+      createNavigationUrl(
+        nextNavigation,
+        window.location.href,
+      ),
+    )
+    exitGuardActiveRef.current = true
+  }
 
   useEffect(() => {
     if (!historyInitializedRef.current) {
@@ -211,6 +290,9 @@ function App() {
       }
 
       historyInitializedRef.current = true
+      ensurePwaExitGuard(
+        navigationRef.current,
+      )
     }
 
     function handlePopState(event: PopStateEvent) {
@@ -218,6 +300,39 @@ function App() {
         event.state,
         window.location.search,
       )
+      const currentNavigation =
+        navigationRef.current
+
+      if (
+        isStandalonePwaRef.current &&
+        isTopLevelNavigationState(
+          currentNavigation,
+        ) &&
+        exitGuardActiveRef.current &&
+        !isPwaExitGuardState(event.state) &&
+        !hasActiveHistoryModal()
+      ) {
+        if (backExitPendingRef.current) {
+          resetBackExitPending()
+          exitGuardActiveRef.current = false
+          window.setTimeout(() => {
+            window.history.back()
+          }, 0)
+          return
+        }
+
+        backExitPendingRef.current = true
+        setIsBackExitToastVisible(true)
+        ensurePwaExitGuard(currentNavigation)
+        backExitTimeoutRef.current =
+          window.setTimeout(() => {
+            backExitPendingRef.current = false
+            backExitTimeoutRef.current = null
+            setIsBackExitToastVisible(false)
+          }, PWA_BACK_EXIT_TIMEOUT_MS)
+        return
+      }
+
       const nextWelcomeOpen =
         nextNavigation.overlay ===
         'mealPlanWelcome'
@@ -236,6 +351,9 @@ function App() {
       }
 
       navigationRef.current = nextNavigation
+      exitGuardActiveRef.current =
+        isPwaExitGuardState(event.state)
+      resetBackExitPending()
       firstRunTutorialOpenRef.current =
         nextTutorialOpen
       mealPlanWelcomeOpenRef.current =
@@ -245,6 +363,9 @@ function App() {
         nextTutorialOpen,
       )
       setIsMealPlanWelcomeOpen(nextWelcomeOpen)
+      window.requestAnimationFrame(() => {
+        ensurePwaExitGuard(nextNavigation)
+      })
     }
 
     window.addEventListener(
@@ -257,6 +378,54 @@ function App() {
         'popstate',
         handlePopState,
       )
+    }
+  }, [])
+
+  useEffect(() => {
+    function clearBackExitPending() {
+      backExitPendingRef.current = false
+      setIsBackExitToastVisible(false)
+
+      if (backExitTimeoutRef.current !== null) {
+        window.clearTimeout(
+          backExitTimeoutRef.current,
+        )
+        backExitTimeoutRef.current = null
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        return
+      }
+
+      clearBackExitPending()
+    }
+
+    document.addEventListener(
+      'visibilitychange',
+      handleVisibilityChange,
+    )
+    window.addEventListener(
+      HISTORY_MODAL_CHANGE_EVENT,
+      clearBackExitPending,
+    )
+
+    return () => {
+      document.removeEventListener(
+        'visibilitychange',
+        handleVisibilityChange,
+      )
+      window.removeEventListener(
+        HISTORY_MODAL_CHANGE_EVENT,
+        clearBackExitPending,
+      )
+
+      if (backExitTimeoutRef.current !== null) {
+        window.clearTimeout(
+          backExitTimeoutRef.current,
+        )
+      }
     }
   }, [])
 
@@ -299,6 +468,17 @@ function App() {
         customEvent.detail.sourceId,
         customEvent.detail.ingredients,
         customEvent.detail.previousSourceId,
+        {
+          sourceKind: 'recipe',
+          sourceRecipeId:
+            customEvent.detail.sourceRecipeId,
+          sourceRecipeName:
+            customEvent.detail.sourceRecipeName,
+          sourceMealDate:
+            customEvent.detail.sourceMealDate,
+          sourceMealTime:
+            customEvent.detail.sourceMealTime,
+        },
       )
     }
 
@@ -363,22 +543,37 @@ function App() {
       nextNavigation,
       window.location.href,
     )
+    const nextHistoryState =
+      mode === 'replace' &&
+      isPwaExitGuardState(
+        window.history.state,
+      ) &&
+      isTopLevelNavigationState(
+        nextNavigation,
+      )
+        ? createPwaExitGuardState(
+            nextNavigation,
+          )
+        : nextNavigation
 
     if (mode === 'replace') {
       window.history.replaceState(
-        nextNavigation,
+        nextHistoryState,
         '',
         nextUrl,
       )
     } else {
       window.history.pushState(
-        nextNavigation,
+        nextHistoryState,
         '',
         nextUrl,
       )
     }
 
     navigationRef.current = nextNavigation
+    exitGuardActiveRef.current =
+      isPwaExitGuardState(nextHistoryState)
+    resetBackExitPending()
     firstRunTutorialOpenRef.current =
       nextNavigation.overlay ===
       'firstRunTutorial'
@@ -400,6 +595,7 @@ function App() {
       recipeId: null,
       plannerRecipeName: null,
       openAiTrial: false,
+      showInventoryRecommendations: false,
       overlay: null,
     })
   }
@@ -421,6 +617,7 @@ function App() {
       recipeId: null,
       plannerRecipeName: null,
       openAiTrial: false,
+      showInventoryRecommendations: false,
       overlay: null,
     }
 
@@ -467,6 +664,9 @@ function App() {
       recipeId,
       plannerRecipeName: null,
       openAiTrial: false,
+      showInventoryRecommendations:
+        navigationRef.current
+          .showInventoryRecommendations,
       overlay: null,
     })
   }
@@ -483,6 +683,9 @@ function App() {
         recipeId: null,
         plannerRecipeName: null,
         openAiTrial: false,
+        showInventoryRecommendations:
+          navigationRef.current
+            .showInventoryRecommendations,
         overlay: null,
       },
       'replace',
@@ -494,8 +697,9 @@ function App() {
       page: 'mealPlan',
       recipeId: null,
       plannerRecipeName: recipeName,
-      openAiTrial: false,
-      overlay: null,
+        openAiTrial: false,
+        showInventoryRecommendations: false,
+        overlay: null,
     })
   }
 
@@ -538,7 +742,13 @@ function App() {
   function handleTutorialComplete(
     shouldNotShowAgain: boolean,
   ) {
-    completeTutorial(shouldNotShowAgain)
+    const isReplay = tutorialReplayRef.current
+
+    completeTutorial(
+      isReplay
+        ? doNotShowAgain
+        : shouldNotShowAgain,
+    )
     firstRunTutorialOpenRef.current = false
     setIsFirstRunTutorialOpen(false)
 
@@ -557,6 +767,41 @@ function App() {
     }
 
     closeFirstRunTutorial()
+  }
+
+  function openGuideFromTutorial(
+    shouldNotShowAgain: boolean,
+  ) {
+    completeTutorial(
+      tutorialReplayRef.current
+        ? doNotShowAgain
+        : shouldNotShowAgain,
+    )
+    tutorialReplayRef.current = false
+    firstRunTutorialOpenRef.current = false
+    setIsFirstRunTutorialOpen(false)
+    commitNavigation(
+      {
+        page: 'guide',
+        recipeId: null,
+        plannerRecipeName: null,
+      openAiTrial: false,
+      showInventoryRecommendations: false,
+      overlay: null,
+      },
+      'replace',
+    )
+  }
+
+  function openInventoryRecommendations() {
+    commitNavigation({
+      page: 'recipes',
+      recipeId: null,
+      plannerRecipeName: null,
+      openAiTrial: false,
+      showInventoryRecommendations: true,
+      overlay: null,
+    })
   }
 
   function replayTutorial() {
@@ -578,6 +823,26 @@ function App() {
         recipeId: null,
         plannerRecipeName: null,
         openAiTrial: false,
+        showInventoryRecommendations: false,
+        overlay: null,
+      },
+      'replace',
+    )
+  }
+
+  function closeFeedback() {
+    if (navigationRef.current.index > 0) {
+      window.history.back()
+      return
+    }
+
+    commitNavigation(
+      {
+        page: 'settings',
+        recipeId: null,
+        plannerRecipeName: null,
+        openAiTrial: false,
+        showInventoryRecommendations: false,
         overlay: null,
       },
       'replace',
@@ -634,6 +899,7 @@ function App() {
         recipeId: null,
         plannerRecipeName: null,
         openAiTrial: false,
+        showInventoryRecommendations: false,
         overlay: null,
       },
       navigationMode,
@@ -654,6 +920,7 @@ function App() {
         recipeId: null,
         plannerRecipeName: null,
         openAiTrial: true,
+        showInventoryRecommendations: false,
         overlay: null,
       },
       navigationMode,
@@ -685,7 +952,13 @@ function App() {
         )
 
       case 'inventory':
-        return <InventoryPage />
+        return (
+          <InventoryPage
+            onOpenRecommendations={
+              openInventoryRecommendations
+            }
+          />
+        )
 
       case 'recipes':
         return (
@@ -694,6 +967,9 @@ function App() {
             onChangePage={navigateToPage}
             onOpenRecipeDetail={openRecipeDetail}
             onCloseRecipeDetail={closeRecipeDetail}
+            showInventoryRecommendations={
+              showInventoryRecommendations
+            }
           />
         )
 
@@ -703,12 +979,27 @@ function App() {
             onOpenGuide={() =>
               navigateToPage('guide')
             }
+            onOpenFeedback={() =>
+              navigateToPage('feedback')
+            }
             onReplayTutorial={replayTutorial}
           />
         )
 
       case 'guide':
-        return <GuidePage onBack={closeGuide} />
+        return (
+          <GuidePage
+            onBack={closeGuide}
+            onOpenFeedback={() =>
+              navigateToPage('feedback')
+            }
+          />
+        )
+
+      case 'feedback':
+        return (
+          <FeedbackPage onBack={closeFeedback} />
+        )
 
       case 'today':
       default:
@@ -730,12 +1021,14 @@ function App() {
     recipes: '레시피',
     settings: '더보기',
     guide: '오늘식탁 사용 가이드',
+    feedback: '의견 보내기',
   }
   const isUtilityPage =
     currentPage === 'shopping' ||
     currentPage === 'inventory' ||
     currentPage === 'settings' ||
-    currentPage === 'guide'
+    currentPage === 'guide' ||
+    currentPage === 'feedback'
   const appClassName = [
     'app',
     currentPage === 'today' ? 'app--home' : '',
@@ -765,10 +1058,18 @@ function App() {
             ? 'recipes'
             : currentPage === 'guide'
               ? 'settings'
+              : currentPage === 'feedback'
+                ? 'settings'
             : currentPage
         }
         onChangePage={navigateToTopLevelPage}
       />
+
+      {isBackExitToastVisible ? (
+        <Toast className="pwa-back-exit-toast">
+          한 번 더 누르면 오늘식탁을 종료해요.
+        </Toast>
+      ) : null}
 
       <MealPlanWelcomeDialog
         open={isMealPlanWelcomeOpen}
@@ -781,6 +1082,7 @@ function App() {
         open={isFirstRunTutorialOpen}
         onClose={closeFirstRunTutorial}
         onComplete={handleTutorialComplete}
+        onOpenGuide={openGuideFromTutorial}
       />
     </div>
   )

@@ -9,6 +9,7 @@ export type MeasurementIngredient = {
   name: string
   amount: number
   unit: string
+  displayText?: string
 }
 
 export type MeasurementSuggestion = {
@@ -96,6 +97,17 @@ function formatCupAmount(value: number) {
   return `${formatDecimal(value)}컵`
 }
 
+function formatPracticalCupAmount(value: number) {
+  const practicalAmount =
+    Math.max(0.25, Math.round(value * 4) / 4)
+  const isApproximate =
+    Math.abs(practicalAmount - value) >= 0.04
+
+  return `${isApproximate ? '약 ' : ''}${formatCupAmount(
+    practicalAmount,
+  )}`
+}
+
 function formatApproximateSpoons(value: number) {
   if (value >= 0.75 && value <= 1.4) {
     return '1'
@@ -178,7 +190,32 @@ export function createMeasurementSuggestions(
   )
   const suggestions: MeasurementSuggestion[] = []
 
-  measurementToolOptions.forEach((tool) => {
+  const orderedTools: MeasurementTool[] =
+    milliliters !== null && milliliters >= 100
+      ? [
+          'measuring-cup',
+          'paper-cup',
+          'measuring-spoon',
+          'rice-spoon',
+          'scale',
+        ]
+      : [
+          'measuring-spoon',
+          'rice-spoon',
+          'measuring-cup',
+          'paper-cup',
+          'scale',
+        ]
+
+  orderedTools.forEach((toolValue) => {
+    const tool = measurementToolOptions.find(
+      (option) => option.value === toolValue,
+    )
+
+    if (!tool) {
+      return
+    }
+
     if (!selected.has(tool.value)) {
       return
     }
@@ -209,12 +246,12 @@ export function createMeasurementSuggestions(
     if (
       tool.value === 'measuring-cup' &&
       milliliters !== null &&
-      milliliters >= 100
+      milliliters >= 50
     ) {
       suggestions.push({
         tool: tool.value,
         toolLabel: tool.label,
-        measurement: `${formatCupAmount(
+        measurement: `${formatPracticalCupAmount(
           milliliters / 200,
         )} (200ml 기준)`,
       })
@@ -224,12 +261,12 @@ export function createMeasurementSuggestions(
     if (
       tool.value === 'paper-cup' &&
       milliliters !== null &&
-      milliliters >= 100
+      milliliters >= 50
     ) {
       suggestions.push({
         tool: tool.value,
         toolLabel: tool.label,
-        measurement: formatCupAmount(
+        measurement: formatPracticalCupAmount(
           milliliters / 200,
         ),
       })

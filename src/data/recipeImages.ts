@@ -18,6 +18,7 @@ import squidRadishSoupImage from '../assets/recipes/squid-radish-soup.webp'
 import steamedEggImage from '../assets/recipes/steamed-egg.webp'
 import tofuMushroomRiceImage from '../assets/recipes/tofu-mushroom-rice.webp'
 import vegetableBibimbapImage from '../assets/recipes/vegetable-bibimbap.webp'
+import { recipes } from './recipes'
 
 export const recipeImages: Record<string, string> = {
   'kimchi-stew': kimchiStewImage,
@@ -46,4 +47,124 @@ export function getRecipeImage(
   recipeId: string,
 ): string | undefined {
   return recipeImages[recipeId]
+}
+
+export type RecipeImageResolution = {
+  src: string
+  imageKey: string
+  match: 'id' | 'name' | 'alias'
+}
+
+export function normalizeRecipeImageName(
+  recipeName: string,
+) {
+  return recipeName
+    .trim()
+    .toLowerCase()
+    .replace(/[\s·()[\]{}'"’_-]+/g, '')
+}
+
+const recipeIdByNormalizedName = new Map(
+  recipes.map((recipe) => [
+    normalizeRecipeImageName(recipe.name),
+    recipe.id,
+  ]),
+)
+
+const exactAliasImageRules: Array<{
+  names: string[]
+  imageKey: string
+}> = [
+  {
+    names: [
+      '순한 카레',
+      '카레라이스',
+      '치킨 카레',
+      '돼지고기 카레',
+      '소고기 카레',
+    ],
+    imageKey: 'curry',
+  },
+  {
+    names: [
+      '고추장 불고기',
+      '고추장 돼지불고기',
+    ],
+    imageKey: 'spicy-pork',
+  },
+  {
+    names: [
+      '소고기 채소잡채',
+      '채소잡채',
+      '버섯잡채',
+    ],
+    imageKey: 'japchae',
+  },
+  {
+    names: ['쇠고기불고기', '소불고기'],
+    imageKey: 'beef-bulgogi',
+  },
+  {
+    names: ['달걀볶음밥'],
+    imageKey: 'egg-fried-rice',
+  },
+  {
+    names: ['달걀찜'],
+    imageKey: 'steamed-egg',
+  },
+  {
+    names: ['쇠고기미역국'],
+    imageKey: 'beef-seaweed-soup',
+  },
+]
+
+export function resolveRecipeImage(
+  recipeId: string | undefined,
+  recipeName: string,
+): RecipeImageResolution | null {
+  if (recipeId && recipeImages[recipeId]) {
+    return {
+      src: recipeImages[recipeId],
+      imageKey: recipeId,
+      match: 'id',
+    }
+  }
+
+  const normalizedName =
+    normalizeRecipeImageName(recipeName)
+  const matchedRecipeId =
+    recipeIdByNormalizedName.get(normalizedName)
+
+  if (
+    matchedRecipeId &&
+    recipeImages[matchedRecipeId]
+  ) {
+    return {
+      src: recipeImages[matchedRecipeId],
+      imageKey: matchedRecipeId,
+      match: 'name',
+    }
+  }
+
+  const aliasMatch = exactAliasImageRules.find(
+    ({ names }) =>
+      names.some(
+        (name) =>
+          normalizeRecipeImageName(name) ===
+          normalizedName,
+      ),
+  )
+
+  if (
+    aliasMatch &&
+    recipeImages[aliasMatch.imageKey]
+  ) {
+    return {
+      src: recipeImages[aliasMatch.imageKey],
+      imageKey: aliasMatch.imageKey,
+      match: 'alias',
+    }
+  }
+
+  return null
 }

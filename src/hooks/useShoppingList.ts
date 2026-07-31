@@ -4,7 +4,9 @@ import { calculateMissingIngredients } from '../services/inventoryEngine'
 import {
   createManualIngredientShoppingItems,
   createManualShoppingItem,
-  createMealShoppingItems,
+  replaceMealShoppingSourceItems,
+  replaceMealPlanRangeShoppingItems,
+  type ShoppingSourceContext,
 } from '../services/shoppingEngine'
 import {
   mergeCompletedShoppingIntoInventory,
@@ -123,15 +125,9 @@ function useShoppingList() {
     sourceId: string,
     ingredients: Ingredient[],
     previousSourceId?: string,
+    context?: ShoppingSourceContext,
   ) {
     const currentItems = readItems()
-    const itemsWithoutOldSource = currentItems.filter(
-      (item) =>
-        item.sourceId !== sourceId &&
-        (!previousSourceId ||
-          item.sourceId !== previousSourceId),
-    )
-
     const mergedIngredients =
       mergeIngredients(ingredients)
 
@@ -141,15 +137,15 @@ function useShoppingList() {
         readInventoryItems(),
       )
 
-    const generatedItems = createMealShoppingItems(
+    const replacement = replaceMealShoppingSourceItems(
+      currentItems,
       sourceId,
       missingIngredients,
+      previousSourceId,
+      context,
     )
 
-    saveItems([
-      ...itemsWithoutOldSource,
-      ...generatedItems,
-    ])
+    saveItems(replacement.items)
   }
 
   function removeMealItems(
@@ -171,26 +167,30 @@ function useShoppingList() {
   function replaceMealPlanRangeItems(
     sourceId: string,
     ingredients: Ingredient[],
+    context?: ShoppingSourceContext,
   ) {
     const currentItems = readItems()
-    const itemsWithoutMealPlanRanges =
-      currentItems.filter(
-        (item) =>
-          !item.sourceId?.startsWith(
-            'meal-plan-range:',
-          ),
+    const replacement =
+      replaceMealPlanRangeShoppingItems(
+        currentItems,
+        sourceId,
+        ingredients,
+        context,
       )
-    const generatedItems = createMealShoppingItems(
-      sourceId,
-      ingredients,
-    )
 
-    saveItems([
-      ...itemsWithoutMealPlanRanges,
-      ...generatedItems,
-    ])
+    saveItems(replacement.items)
 
-    return generatedItems.length
+    return readItems().filter(
+      (item) =>
+        item.sourceId === sourceId &&
+        !item.completed,
+    ).length
+  }
+
+  function replaceAllItems(
+    nextItems: ShoppingItem[],
+  ) {
+    saveItems(nextItems)
   }
 
   function setItemsCompleted(
@@ -293,14 +293,42 @@ function useShoppingList() {
       )
 
     if (result.appliedShoppingItemIds.length === 0) {
-      return 0
+      return {
+        appliedItemCount: 0,
+        reminderItemCount: 0,
+        plannedItemCount: 0,
+      }
     }
 
     writeInventoryItems(result.inventoryItems)
 
     saveItems(result.shoppingItems)
 
-    return result.appliedItemCount
+    const distinctKeys = (
+      predicate: (item: ShoppingItem) => boolean,
+    ) =>
+      new Set(
+        result.shoppingItems
+          .filter(predicate)
+          .map(
+            (item) =>
+              `${item.name.trim().toLowerCase()}\u0000${item.unit?.trim() ?? ''}`,
+          ),
+      ).size
+
+    return {
+      appliedItemCount: result.appliedItemCount,
+      reminderItemCount: distinctKeys(
+        (item) =>
+          item.purchaseStatus === 'not-purchased' &&
+          item.reminderStatus === 'pending',
+      ),
+      plannedItemCount: distinctKeys(
+        (item) =>
+          item.purchaseStatus === 'planned' ||
+          item.purchaseStatus === 'partial',
+      ),
+    }
   }
 
   return {
@@ -317,6 +345,7 @@ function useShoppingList() {
     addMealItems,
     removeMealItems,
     replaceMealPlanRangeItems,
+    replaceAllItems,
     setItemsCompleted,
     recordPurchase,
     markItemsNotPurchased,

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
+  BookOpen,
   Lightbulb,
-  Sparkles,
 } from 'lucide-react'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
@@ -16,6 +16,8 @@ type RecipeRecommendationBlockProps = {
   onSelectRecipe: (recipeName: string) => void
   onViewRecipe: (recipeId: string) => void
   onOpenInventory: () => void
+  collapsed?: boolean
+  onToggle?: () => void
 }
 
 type RecommendationFilter =
@@ -36,6 +38,8 @@ function RecipeRecommendationBlock({
   onSelectRecipe,
   onViewRecipe,
   onOpenInventory,
+  collapsed = false,
+  onToggle,
 }: RecipeRecommendationBlockProps) {
   const [selectedFilter, setSelectedFilter] =
     useState<RecommendationFilter>('all')
@@ -72,100 +76,113 @@ function RecipeRecommendationBlock({
 
   return (
     <Section
-      title="오늘 메뉴 추천"
-      description="냉장고 재료와 저장된 레시피를 기기 안에서 비교해요."
+      title="저장된 레시피에서 찾기"
+      description="냉장고 재료와 저장된 레시피를 비교해 만들기 좋은 메뉴를 찾아드려요."
+      collapsible={Boolean(onToggle)}
+      collapsed={collapsed}
+      onToggle={onToggle}
     >
       <Card>
         <div className="ai-recommendation-panel">
           <div className="ai-recommendation-panel__header">
             <div>
               <Badge tone="neutral">
-                <Sparkles
+                <BookOpen
                   size={14}
                   strokeWidth={2.2}
                   aria-hidden="true"
                 />
-                냉장고 기반 추천
+                저장된 레시피 비교
               </Badge>
               <h3>
                 {items.length > 0
-                  ? '지금 있는 재료로 메뉴를 골라드려요.'
-                  : '추천하려면 냉장고 재료가 필요해요.'}
+                  ? '냉장고 재료와 잘 맞는 레시피를 찾았어요.'
+                  : '냉장고 재료를 추가하면 비교할 수 있어요.'}
               </h3>
               <p>
-                이 추천은 API를 호출하지 않아요. AI 맞춤
-                식단은 위의 7일 무료 체험에서 한 번 만들 수
-                있어요.
+                이 기능은 API를 호출하지 않고 오늘식탁에
+                저장된 레시피만 비교해요.
               </p>
             </div>
           </div>
-          {items.length === 0 ? (
-            <Button
-              variant="secondary"
-              onClick={onOpenInventory}
-            >
-              냉장고에 재료 추가
-            </Button>
-          ) : null}
         </div>
 
         <div className="local-recommendation-heading">
-          <Badge tone="neutral">기본 추천</Badge>
+          <Badge tone="neutral">API 미사용</Badge>
           <p>
-            저장된 레시피와 냉장고 재료를 비교한 결과예요.
+            기본·가져온·저장된 식단 레시피를 냉장고와
+            비교한 결과예요.
           </p>
         </div>
 
-        <div
-          className="recommendation-filters"
-          role="group"
-          aria-label="추천 필터"
-        >
-          {recommendationFilters.map((filter) => (
-            <Button
-              key={filter.value}
-              className="recommendation-filters__button"
-              variant={
-                selectedFilter === filter.value
-                  ? 'primary'
-                  : 'secondary'
-              }
-              aria-pressed={
-                selectedFilter === filter.value
-              }
-              onClick={() =>
-                setSelectedFilter(filter.value)
-              }
-            >
-              {filter.label}
-            </Button>
-          ))}
-        </div>
+        {items.length > 0 ? (
+          <div
+            className="recommendation-filters"
+            role="group"
+            aria-label="저장된 레시피 필터"
+          >
+            {recommendationFilters.map((filter) => (
+              <Button
+                key={filter.value}
+                className="recommendation-filters__button"
+                variant={
+                  selectedFilter === filter.value
+                    ? 'primary'
+                    : 'secondary'
+                }
+                aria-pressed={
+                  selectedFilter === filter.value
+                }
+                onClick={() =>
+                  setSelectedFilter(filter.value)
+                }
+              >
+                {filter.label}
+              </Button>
+            ))}
+          </div>
+        ) : null}
 
-        <Button
-          className="recommendation-random-button"
-          variant="secondary"
-          fullWidth
-          disabled={
-            filteredRecommendations.length === 0
-          }
-          onClick={handleRandomRecommendation}
-        >
-          메뉴 하나 골라줘
-        </Button>
+        {items.length > 0 ? (
+          <Button
+            className="recommendation-random-button"
+            variant="secondary"
+            fullWidth
+            disabled={
+              filteredRecommendations.length === 0
+            }
+            onClick={handleRandomRecommendation}
+          >
+            저장된 레시피에서 찾기
+          </Button>
+        ) : null}
 
-        {filteredRecommendations.length === 0 ? (
+        {items.length === 0 ? (
+          <EmptyState
+            icon={<Lightbulb />}
+            title="냉장고에 등록된 재료가 없어요."
+            description="재료를 추가하면 저장된 레시피 중 만들기 좋은 메뉴를 비교해 드려요."
+            action={
+              <Button
+                variant="secondary"
+                onClick={onOpenInventory}
+              >
+                냉장고에 재료 추가
+              </Button>
+            }
+          />
+        ) : filteredRecommendations.length === 0 ? (
           <EmptyState
             icon={<Lightbulb />}
             title={
               recommendations.length === 0
-                ? '추천할 메뉴가 아직 없어요.'
-                : '지금 조건에 맞는 메뉴가 없어요.'
+                ? '저장된 레시피가 아직 없어요.'
+                : '이 조건에 맞는 저장 레시피가 없어요.'
             }
             description={
               recommendations.length === 0
-                ? '레시피가 생기면 냉장고 속 재료에 맞춰 골라드릴게요.'
-                : '다른 기준을 눌러 오늘의 메뉴를 찾아보세요.'
+                ? '기본 레시피를 확인하거나 식사 꾸러미를 가져와 주세요.'
+                : '전체를 누르면 부족한 재료가 적은 레시피도 볼 수 있어요.'
             }
             action={
               recommendations.length > 0 &&
@@ -196,15 +213,15 @@ function RecipeRecommendationBlock({
 
                     <span className="inventory-item__location">
                       {recommendation.isInventorySufficient
-                        ? '바로 만들어요'
-                        : `더 필요해요 ${recommendation.missingIngredientCount}개`}
+                        ? '지금 만들 수 있어요'
+                        : `추가 재료 ${recommendation.missingIngredientCount}개`}
                     </span>
                   </div>
 
                   <p>
                     {recommendation.isInventorySufficient
                       ? '지금 있는 재료로 만들 수 있어요.'
-                      : `더 필요한 재료: ${recommendation.missingIngredients
+                      : `재료가 조금 더 필요해요. 더 필요한 재료: ${recommendation.missingIngredients
                           .map(
                             (ingredient) =>
                               `${ingredient.name} ${ingredient.quantity}${ingredient.unit}`,

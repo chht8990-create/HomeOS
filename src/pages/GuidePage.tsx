@@ -3,6 +3,7 @@ import {
   BookOpen,
   CalendarDays,
   CircleHelp,
+  MessageSquareText,
   PackageOpen,
   ShoppingCart,
   Sparkles,
@@ -16,6 +17,7 @@ import Section from '../components/ui/Section'
 
 type GuidePageProps = {
   onBack: () => void
+  onOpenFeedback: () => void
 }
 
 const guideItems: Array<{
@@ -38,7 +40,7 @@ const guideItems: Array<{
   {
     title: '장보기',
     description:
-      '구매한 품목을 체크하고 실제 구매량만 냉장고에 반영할 수 있어요.',
+      '구매한 재료를 체크하고 실제 구매량만 냉장고에 반영할 수 있어요.',
     Icon: ShoppingCart,
   },
   {
@@ -67,11 +69,22 @@ const guideItems: Array<{
   },
 ]
 
-function GuidePage({ onBack }: GuidePageProps) {
+const guideSteps = [
+  '식단 정하기',
+  '필요한 재료 확인',
+  '장보기 목록 만들기',
+  '구매한 재료 냉장고에 담기',
+  '레시피 보며 요리하기',
+]
+
+function GuidePage({
+  onBack,
+  onOpenFeedback,
+}: GuidePageProps) {
   return (
     <>
       <ScreenHeader
-        title="오늘식탁 사용 가이드"
+        title="오늘식탁 가이드"
         description="필요한 기능을 짧게 살펴보세요."
         action={
           <Button
@@ -93,6 +106,20 @@ function GuidePage({ onBack }: GuidePageProps) {
           title="처음부터 차근차근"
           description="오늘식탁의 주요 흐름을 화면 순서대로 정리했어요."
         >
+          <ol className="guide-page__steps">
+            {guideSteps.map((step, index) => (
+              <li key={step}>
+                <span>{index + 1}</span>
+                <strong>{step}</strong>
+              </li>
+            ))}
+          </ol>
+        </Section>
+
+        <Section
+          title="기능별로 살펴보기"
+          description="필요한 기능부터 골라 확인하세요."
+        >
           <div className="guide-page__grid">
             {guideItems.map(({ title, description, Icon }) => (
               <Card
@@ -113,6 +140,28 @@ function GuidePage({ onBack }: GuidePageProps) {
             ))}
           </div>
         </Section>
+
+        <Card className="guide-page__feedback">
+          <MessageSquareText
+            size={22}
+            aria-hidden="true"
+          />
+          <div>
+            <strong>
+              사용하면서 불편한 점이 있었나요?
+            </strong>
+            <p>
+              짧은 의견도 오늘식탁을 개선하는 데
+              도움이 됩니다.
+            </p>
+          </div>
+          <Button
+            variant="secondary"
+            onClick={onOpenFeedback}
+          >
+            의견 보내기
+          </Button>
+        </Card>
       </main>
     </>
   )

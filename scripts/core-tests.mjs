@@ -20,7 +20,7 @@ async function check(name, assertion) {
 
 try {
   await check(
-    'Release 1.0.1: package와 앱 표시 버전 동기화',
+    'Release 1.0.2: package와 앱 표시 버전 동기화',
     () => {
       const packageJson = JSON.parse(
         readFileSync('package.json', 'utf8'),
@@ -32,14 +32,22 @@ try {
         'src/pages/SettingsPage.tsx',
         'utf8',
       )
+      const appConfig = readFileSync(
+        'src/config/app.ts',
+        'utf8',
+      )
 
-      assert.equal(packageJson.version, '1.0.1')
-      assert.equal(packageLock.version, '1.0.1')
+      assert.equal(packageJson.version, '1.0.2')
+      assert.equal(packageLock.version, '1.0.2')
       assert.equal(
         packageLock.packages[''].version,
-        '1.0.1',
+        '1.0.2',
       )
-      assert.match(settingsPage, />1\.0\.1</)
+      assert.match(
+        appConfig,
+        /APP_VERSION = '1\.0\.2'/,
+      )
+      assert.match(settingsPage, /APP_VERSION/)
     },
   )
 
@@ -89,7 +97,7 @@ try {
   )
 
   await check(
-    'PWA 캐시: v1.0.1 앱 셸·업데이트·API 제외 정책',
+    'PWA 캐시: v1.0.2 앱 셸·업데이트·API 제외 정책',
     () => {
       const serviceWorker = readFileSync(
         'public/sw.js',
@@ -98,7 +106,7 @@ try {
 
       assert.match(
         serviceWorker,
-        /RELEASE_VERSION = '1\.0\.1'/,
+        /RELEASE_VERSION = '1\.0\.2'/,
       )
       assert.match(
         serviceWorker,
@@ -134,15 +142,19 @@ try {
   } = await vite.ssrLoadModule(
     '/src/services/recommendationEngine.ts',
   )
+  const { calculateMissingIngredients } =
+    await vite.ssrLoadModule(
+      '/src/services/inventoryEngine.ts',
+    )
   const { groupShoppingItemsByCategory } =
     await vite.ssrLoadModule(
       '/src/services/shoppingCategoryEngine.ts',
     )
   const {
     calculateShoppingPurchase,
+    createShoppingReminderPreview,
     deleteShoppingItems,
     getShoppingReminderItems,
-    markShoppingItemsForReminder,
     normalizeShoppingItem,
     normalizeStoredShoppingItem,
     restoreShoppingReminderItems,
@@ -192,8 +204,33 @@ try {
     await vite.ssrLoadModule(
       '/src/data/recipes.ts',
     )
-  const { recipeImages } = await vite.ssrLoadModule(
+  const {
+    recipeImages,
+    resolveRecipeImage,
+  } = await vite.ssrLoadModule(
     '/src/data/recipeImages.ts',
+  )
+  const { normalizeAiMenuName } =
+    await vite.ssrLoadModule(
+      '/src/services/aiMenuNameEngine.ts',
+    )
+  const {
+    createIngredientUnitPresentation,
+    normalizeAiIngredientUnit,
+  } =
+    await vite.ssrLoadModule(
+      '/src/services/ingredientUnitEngine.ts',
+    )
+  const {
+    replaceMealShoppingSourceItems,
+    replaceMealPlanRangeShoppingItems,
+  } = await vite.ssrLoadModule(
+    '/src/services/shoppingEngine.ts',
+  )
+  const {
+    updateRecipeDetailGenerationState,
+  } = await vite.ssrLoadModule(
+    '/src/hooks/useAiMealPlanTrial.ts',
   )
   const { auditPremiumRecipes } =
     await vite.ssrLoadModule(
@@ -208,13 +245,23 @@ try {
     '/src/services/recipeNormalizationEngine.ts',
   )
   const {
+    createPwaExitGuardState,
     createNavigationState,
     createNavigationUrl,
+    isPwaExitGuardState,
     isSameNavigationTarget,
+    isTopLevelNavigationState,
     planTopLevelNavigation,
     readNavigationState,
+    shouldUsePwaBackExit,
   } = await vite.ssrLoadModule(
     '/src/services/appNavigationEngine.ts',
+  )
+  const {
+    createAiMealPlanPipelineError,
+    mapAiMealPlanPipelineErrorCode,
+  } = await vite.ssrLoadModule(
+    '/src/services/aiMealPlanPipelineEngine.ts',
   )
   const {
     createTemporaryModalHistoryState,
@@ -232,6 +279,7 @@ try {
     '/src/services/measurementEngine.ts',
   )
   const {
+    normalizePositiveIntegerDraft,
     normalizePositiveIntegerInput,
   } = await vite.ssrLoadModule(
     '/src/services/integerInputEngine.ts',
@@ -270,8 +318,12 @@ try {
   )
   const {
     addRecipeToStoredAiMealPlanTrial,
+    classifyAiMealCookingType,
+    completeStoredAiMealPlanTrial,
     getAiMealPlanTrialFailureState,
+    getRecentMealPlanMenuNames,
     parseAiMealPlanDraftOutput,
+    parseAiMealPlanDraftOutputResult,
     parseAiMealPlanTrialOutput,
     parseStoredAiMealPlanTrial,
     validateAiMealPlanRecipeDetailRequest,
@@ -292,6 +344,15 @@ try {
     await vite.ssrLoadModule(
       '/api/ai/meal-plan-recipe-detail.ts',
     )
+  const {
+    FEEDBACK_MESSAGE_MAX_LENGTH,
+    escapeFeedbackText,
+    validateFeedbackPayload,
+  } = await vite.ssrLoadModule(
+    '/src/services/feedbackEngine.ts',
+  )
+  const { handleFeedback } =
+    await vite.ssrLoadModule('/api/feedback.ts')
 
   const recipe = {
     id: 'recipe-test-stew',
@@ -311,6 +372,15 @@ try {
       },
     ],
   }
+  const aiTestMenuNames = [
+    '김치찌개',
+    '고등어구이',
+    '소고기미역국',
+    '닭갈비',
+    '계란볶음밥',
+    '카레',
+    '두부조림',
+  ]
   const inventoryItem = {
     id: 'inventory-kimchi',
     name: '김치',
@@ -319,6 +389,29 @@ try {
     location: 'fridge',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
+  }
+
+  function createTestFeedbackPayload(
+    overrides = {},
+  ) {
+    return {
+      category: 'issue',
+      message: '장보기 화면을 확인해 주세요.',
+      diagnostics: {
+        appVersion: '1.0.2',
+        currentPage: 'feedback',
+        createdAt: '2026-07-30T00:00:00.000Z',
+        userAgent: 'Core Test Browser',
+        viewport: {
+          width: 390,
+          height: 844,
+        },
+        displayMode: 'standalone',
+        online: true,
+        language: 'ko-KR',
+      },
+      ...overrides,
+    }
   }
 
   function createTestAiDetails(
@@ -376,9 +469,55 @@ try {
     ),
     'utf8',
   )
+  const appCssSource = readFileSync(
+    new URL('../src/App.css', import.meta.url),
+    'utf8',
+  )
   const recipeCssSource = readFileSync(
     new URL(
       '../src/pages/RecipePage.css',
+      import.meta.url,
+    ),
+    'utf8',
+  )
+  const positiveIntegerInputSource = readFileSync(
+    new URL(
+      '../src/components/ui/PositiveIntegerInput.tsx',
+      import.meta.url,
+    ),
+    'utf8',
+  )
+  const sectionSource = readFileSync(
+    new URL(
+      '../src/components/ui/Section.tsx',
+      import.meta.url,
+    ),
+    'utf8',
+  )
+  const mealPlanPageSource = readFileSync(
+    new URL(
+      '../src/pages/MealPlanPage.tsx',
+      import.meta.url,
+    ),
+    'utf8',
+  )
+  const shoppingPageSource = readFileSync(
+    new URL(
+      '../src/pages/ShoppingPage.tsx',
+      import.meta.url,
+    ),
+    'utf8',
+  )
+  const homePageSource = readFileSync(
+    new URL(
+      '../src/pages/HomePage.tsx',
+      import.meta.url,
+    ),
+    'utf8',
+  )
+  const inventoryPageSource = readFileSync(
+    new URL(
+      '../src/pages/InventoryPage.tsx',
       import.meta.url,
     ),
     'utf8',
@@ -428,6 +567,132 @@ try {
       assert.doesNotMatch(
         tutorialSource,
         /오늘식탁\s*<br\s*\/?>\s*시작하기/,
+      )
+    },
+  )
+
+  await check(
+    'Tutorial·Guide: 짧은 문구와 사용 순서 연결',
+    () => {
+      assert.match(
+        tutorialSource,
+        /사용 순서 자세히 보기/,
+      )
+      assert.match(
+        tutorialSource,
+        /onOpenGuide\(doNotShowAgain\)/,
+      )
+      assert.equal(
+        tutorialPages[2].description,
+        '필요한 재료를 장보기 목록으로 모아드려요.',
+      )
+      const tutorialPagesSource = readFileSync(
+        new URL(
+          '../src/data/tutorialPages.ts',
+          import.meta.url,
+        ),
+        'utf8',
+      )
+      assert.match(
+        tutorialPagesSource,
+        /Refrigerator/,
+      )
+      assert.doesNotMatch(
+        tutorialPagesSource,
+        /PackageOpen/,
+      )
+    },
+  )
+
+  await check(
+    'Input UI: 편집 중 빈 값과 전체 선택을 허용하고 blur에서 확정',
+    () => {
+      assert.match(
+        positiveIntegerInputSource,
+        /draftValue/,
+      )
+      assert.match(
+        positiveIntegerInputSource,
+        /input\.select\(\)/,
+      )
+      assert.match(
+        positiveIntegerInputSource,
+        /nextDraftValue !== ''/,
+      )
+      assert.match(
+        positiveIntegerInputSource,
+        /onBlur=\{handleBlur\}/,
+      )
+    },
+  )
+
+  await check(
+    'Disclosure UI: 화면 상태만 접고 history를 만들지 않음',
+    () => {
+      assert.match(
+        sectionSource,
+        /aria-expanded=\{!collapsed\}/,
+      )
+      assert.match(
+        sectionSource,
+        /hidden=\{collapsible && collapsed\}/,
+      )
+      assert.match(
+        mealPlanPageSource,
+        /today-table\.planner\.sections\.v1/,
+      )
+      assert.match(
+        recipePageSource,
+        /hidden=\{!ingredientsExpanded\}/,
+      )
+      assert.doesNotMatch(
+        sectionSource,
+        /history\.(pushState|replaceState)/,
+      )
+      assert.match(sectionSource, /collapsed \? '보기' : '접기'/)
+      assert.match(
+        recipePageSource,
+        /stepsExpanded\s*\?\s*'접기'\s*:\s*'조리 순서 보기'/,
+      )
+      assert.match(
+        recipePageSource,
+        /hidden=\{!stepsExpanded\}/,
+      )
+    },
+  )
+
+  await check(
+    'Planner 저장 안내: 카드 강조와 안내를 2.8초에 함께 종료',
+    () => {
+      assert.match(
+        mealPlanPageSource,
+        /setSavedMealFeedback\(null\)[\s\S]*setHighlightedMealPlanId\(null\)/,
+      )
+      assert.match(
+        mealPlanPageSource,
+        /\}, 2800\)/,
+      )
+      assert.match(
+        mealPlanPageSource,
+        /onChange=\{\(event\) => \{\s*clearSavedMealConfirmation\(\)/,
+      )
+    },
+  )
+
+  await check(
+    'UX Writing: 장보기 문맥을 재료로 통일',
+    () => {
+      assert.match(
+        shoppingPageSource,
+        /못 산 재료/,
+      )
+      assert.match(
+        shoppingPageSource,
+        /구매할 재료/,
+      )
+      assert.doesNotMatch(
+        shoppingPageSource,
+        /필요한 품목/,
       )
     },
   )
@@ -544,6 +809,14 @@ try {
         4,
       )
       assert.equal(
+        normalizePositiveIntegerDraft('', options),
+        '',
+      )
+      assert.equal(
+        normalizePositiveIntegerDraft('06', options),
+        '6',
+      )
+      assert.equal(
         JSON.parse(
           JSON.stringify({
             servings: normalizePositiveIntegerInput(
@@ -574,6 +847,18 @@ try {
         getInventoryListDisplayName(item),
         /12|g/,
       )
+      assert.match(
+        inventoryPageSource,
+        /이 재료로 만들 메뉴 찾기/,
+      )
+      assert.match(
+        inventoryPageSource,
+        /저장된 레시피에서 찾기/,
+      )
+      assert.match(
+        inventoryPageSource,
+        /onOpenRecommendations/,
+      )
     },
   )
 
@@ -594,6 +879,22 @@ try {
       assert.equal(
         suggestions[0].measurement,
         '3컵 반',
+      )
+
+      const juiceSuggestions =
+        createMeasurementSuggestions(
+          {
+            name: '배즙',
+            amount: 120,
+            unit: 'ml',
+          },
+          ['paper-cup'],
+        )
+
+      assert.equal(juiceSuggestions.length, 1)
+      assert.equal(
+        juiceSuggestions[0].measurement,
+        '약 반 컵',
       )
     },
   )
@@ -622,6 +923,101 @@ try {
             `${suggestion.toolLabel}:${suggestion.measurement}`,
         ),
         ['계량스푼:1큰술', '밥숟가락:약 1스푼'],
+      )
+    },
+  )
+
+  await check(
+    'Measurement: 선택한 도구 조합이 실제 추천 계량값을 결정',
+    () => {
+      const suggestionText = (
+        name,
+        amount,
+        unit,
+        tools,
+      ) =>
+        createMeasurementSuggestions(
+          { name, amount, unit },
+          tools,
+        ).map(
+          (suggestion) =>
+            `${suggestion.toolLabel}:${suggestion.measurement}`,
+        )
+
+      assert.deepEqual(
+        suggestionText(
+          '간장',
+          30,
+          'ml',
+          ['rice-spoon'],
+        ),
+        ['밥숟가락:약 2.5스푼'],
+      )
+      assert.deepEqual(
+        suggestionText(
+          '물',
+          200,
+          'ml',
+          ['paper-cup'],
+        ),
+        ['종이컵:1컵'],
+      )
+      assert.deepEqual(
+        suggestionText(
+          '다진 마늘',
+          10,
+          'ml',
+          ['measuring-spoon'],
+        ),
+        ['계량스푼:2작은술'],
+      )
+      assert.deepEqual(
+        suggestionText(
+          '돼지고기',
+          400,
+          'g',
+          ['scale'],
+        ),
+        ['전자저울:400g'],
+      )
+      assert.deepEqual(
+        suggestionText(
+          '육수',
+          1000,
+          'ml',
+          [
+            'measuring-cup',
+            'measuring-spoon',
+          ],
+        ),
+        ['계량컵:5컵 (200ml 기준)'],
+      )
+      assert.deepEqual(
+        suggestionText(
+          '양파',
+          1,
+          '개',
+          ['scale'],
+        ),
+        [],
+      )
+      assert.deepEqual(
+        suggestionText(
+          '소금',
+          1,
+          '한 꼬집',
+          ['measuring-spoon'],
+        ),
+        [],
+      )
+      assert.deepEqual(
+        suggestionText(
+          '물',
+          200,
+          'ml',
+          [],
+        ),
+        [],
       )
     },
   )
@@ -680,6 +1076,212 @@ try {
           result.missingIngredientCount,
         ),
         50,
+      )
+    },
+  )
+
+  await check(
+    'Inventory 비교: 명시된 생활 단위 환산만 적용하고 다른 단위는 안전하게 분리',
+    () => {
+      const ingredients = [
+        {
+          id: 'onion',
+          name: '양파',
+          quantity: 300,
+          unit: 'g',
+        },
+        {
+          id: 'pork',
+          name: '돼지고기',
+          quantity: 400,
+          unit: 'g',
+        },
+      ]
+      const missing = calculateMissingIngredients(
+        ingredients,
+        [
+          {
+            id: 'inventory-onion',
+            name: '양파',
+            quantity: 1,
+            unit: '개',
+            location: 'fridge',
+            createdAt: '2026-08-01T00:00:00.000Z',
+            updatedAt: '2026-08-01T00:00:00.000Z',
+          },
+          {
+            id: 'inventory-pork',
+            name: '돼지고기',
+            quantity: 1,
+            unit: '팩',
+            location: 'fridge',
+            createdAt: '2026-08-01T00:00:00.000Z',
+            updatedAt: '2026-08-01T00:00:00.000Z',
+          },
+        ],
+      )
+
+      assert.deepEqual(
+        missing.map((ingredient) => [
+          ingredient.name,
+          ingredient.quantity,
+          ingredient.unit,
+        ]),
+        [
+          ['양파', 150, 'g'],
+          ['돼지고기', 400, 'g'],
+        ],
+      )
+    },
+  )
+
+  await check(
+    'Recommendation 정합성: 저장 레시피만 수량·단위로 비교하고 API 표현 제거',
+    () => {
+      const comparisonRecipes = [
+        {
+          id: 'kimchi-stew-example',
+          name: '김치찌개',
+          ingredients: [
+            {
+              id: 'kimchi',
+              name: '김치',
+              quantity: 1,
+              unit: '포기',
+            },
+            {
+              id: 'tofu',
+              name: '두부',
+              quantity: 1,
+              unit: '모',
+            },
+          ],
+        },
+        {
+          id: 'braised-tofu-example',
+          name: '두부조림',
+          ingredients: [
+            {
+              id: 'tofu-2',
+              name: '두부',
+              quantity: 1,
+              unit: '모',
+            },
+            {
+              id: 'soy-sauce',
+              name: '간장',
+              quantity: 2,
+              unit: '큰술',
+            },
+          ],
+        },
+        {
+          id: 'egg-rice-example',
+          name: '계란볶음밥',
+          ingredients: [
+            {
+              id: 'egg',
+              name: '계란',
+              quantity: 2,
+              unit: '개',
+            },
+            {
+              id: 'rice',
+              name: '밥',
+              quantity: 2,
+              unit: '공기',
+            },
+          ],
+        },
+      ]
+      const comparisonInventory = [
+        {
+          id: 'inventory-kimchi-example',
+          name: '김치',
+          quantity: 1,
+          unit: '포기',
+        },
+        {
+          id: 'inventory-tofu-example',
+          name: '두부',
+          quantity: 1,
+          unit: '모',
+        },
+        {
+          id: 'inventory-egg-example',
+          name: '계란',
+          quantity: 1,
+          unit: '개',
+        },
+      ]
+      const results = recommendRecipes(
+        comparisonRecipes,
+        comparisonInventory,
+      )
+
+      assert.deepEqual(
+        results.map((result) => ({
+          name: result.recipe.name,
+          missing: result.missingIngredientCount,
+        })),
+        [
+          { name: '김치찌개', missing: 0 },
+          { name: '두부조림', missing: 1 },
+          { name: '계란볶음밥', missing: 2 },
+        ],
+      )
+      assert.deepEqual(recommendRecipes([], []), [])
+      assert.equal(
+        recommendRecipes(
+          [comparisonRecipes[1]],
+          [
+            {
+              id: 'legacy-tofu-grams',
+              name: '두부',
+              quantity: 300,
+              unit: 'g',
+            },
+          ],
+        )[0].missingIngredientCount,
+        1,
+      )
+
+      const blockSource = readFileSync(
+        'src/blocks/RecipeRecommendationBlock.tsx',
+        'utf8',
+      )
+      const recipeHookSource = readFileSync(
+        'src/hooks/useRecipes.ts',
+        'utf8',
+      )
+
+      assert.match(
+        blockSource,
+        /저장된 레시피에서 찾기/,
+      )
+      assert.match(
+        blockSource,
+        /이 기능은 API를 호출하지 않고/,
+      )
+      const recipePageSource = readFileSync(
+        'src/pages/RecipePage.tsx',
+        'utf8',
+      )
+      assert.match(
+        recipePageSource,
+        /추가 재료가 적은 순으로 보여드릴게요/,
+      )
+      assert.match(
+        recipePageSource,
+        /showInventoryRecommendations/,
+      )
+      assert.doesNotMatch(
+        blockSource,
+        /냉장고 기반 추천|지금 있는 재료로 메뉴를 골라드려요/,
+      )
+      assert.match(
+        recipeHookSource,
+        /mergeRecipeCatalog\([\s\S]*builtInRecipes[\s\S]*importedRecipes[\s\S]*aiMealPlanTrialRecipes/,
       )
     },
   )
@@ -766,6 +1368,262 @@ try {
       assert.match(dateMarkup, /type="date"/)
       assert.match(dateMarkup, /2026-08-01/)
       assert.match(dateMarkup, /식단 날짜/)
+    },
+  )
+
+  await check(
+    'Feedback 검증: 유형·길이·선택 연락처 규칙',
+    () => {
+      const valid = validateFeedbackPayload(
+        createTestFeedbackPayload(),
+      )
+      const withoutCategory =
+        validateFeedbackPayload(
+          createTestFeedbackPayload({
+            category: '',
+          }),
+        )
+      const tooShort = validateFeedbackPayload(
+        createTestFeedbackPayload({
+          message: '짧음',
+        }),
+      )
+      const maximumLength =
+        validateFeedbackPayload(
+          createTestFeedbackPayload({
+            category: 'positive',
+            message: '가'.repeat(
+              FEEDBACK_MESSAGE_MAX_LENGTH,
+            ),
+          }),
+        )
+      const tooLong = validateFeedbackPayload(
+        createTestFeedbackPayload({
+          message: '가'.repeat(
+            FEEDBACK_MESSAGE_MAX_LENGTH + 1,
+          ),
+        }),
+      )
+
+      assert.equal(valid.ok, true)
+      assert.equal(
+        valid.ok ? valid.data.contact : null,
+        undefined,
+      )
+      assert.equal(withoutCategory.ok, false)
+      assert.equal(tooShort.ok, false)
+      assert.equal(maximumLength.ok, true)
+      assert.equal(tooLong.ok, false)
+    },
+  )
+
+  await check(
+    'Feedback 개인정보: 허용하지 않은 저장 데이터 필드를 거부',
+    () => {
+      const withInventory =
+        validateFeedbackPayload(
+          createTestFeedbackPayload({
+            inventoryItems: [
+              { name: '양파', quantity: 2 },
+            ],
+          }),
+        )
+      const withLocalStorage =
+        validateFeedbackPayload(
+          createTestFeedbackPayload({
+            localStorage: {
+              shopping: ['대파'],
+            },
+          }),
+        )
+      const clientSource = readFileSync(
+        'src/services/feedbackClient.ts',
+        'utf8',
+      )
+
+      assert.equal(withInventory.ok, false)
+      assert.equal(withLocalStorage.ok, false)
+      assert.doesNotMatch(
+        clientSource,
+        /localStorage|inventoryItems|mealPlans|shoppingItems/,
+      )
+      assert.match(clientSource, /appVersion/)
+      assert.match(clientSource, /userAgent/)
+      assert.match(clientSource, /displayMode/)
+    },
+  )
+
+  await check(
+    'Feedback 보안: HTML·script 문자를 안전하게 escape',
+    () => {
+      assert.equal(
+        escapeFeedbackText(
+          '<script>alert("x")</script>',
+        ),
+        '&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;',
+      )
+    },
+  )
+
+  await check(
+    'Feedback API: JSON 검증·성공·연속 중복 방지',
+    async () => {
+      let deliveryCount = 0
+      const payload = createTestFeedbackPayload({
+        message:
+          '<script>화면이 불편합니다.</script>',
+      })
+      const headers = {
+        'Content-Type': 'application/json',
+        'x-forwarded-for': '192.0.2.10',
+        'user-agent': 'feedback-core-test',
+      }
+      const delivery = async (feedback) => {
+        deliveryCount += 1
+        assert.equal(
+          feedback.message,
+          payload.message,
+        )
+      }
+      const first = await handleFeedback(
+        new Request(
+          'https://example.com/api/feedback',
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload),
+          },
+        ),
+        {},
+        delivery,
+      )
+      const duplicate = await handleFeedback(
+        new Request(
+          'https://example.com/api/feedback',
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload),
+          },
+        ),
+        {},
+        delivery,
+      )
+      const duplicateBody =
+        await duplicate.json()
+      const unsupported = await handleFeedback(
+        new Request(
+          'https://example.com/api/feedback',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'text/plain',
+              'x-forwarded-for': '192.0.2.11',
+            },
+            body: 'text',
+          },
+        ),
+        {},
+        delivery,
+      )
+
+      assert.equal(first.status, 200)
+      assert.equal(duplicate.status, 200)
+      assert.equal(duplicateBody.duplicate, true)
+      assert.equal(deliveryCount, 1)
+      assert.equal(unsupported.status, 415)
+    },
+  )
+
+  await check(
+    'Feedback API: 수신 설정 없음·rate limit을 안전하게 처리',
+    async () => {
+      const notConfigured =
+        await handleFeedback(
+          new Request(
+            'https://example.com/api/feedback',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type':
+                  'application/json',
+                'x-forwarded-for':
+                  '192.0.2.20',
+                'user-agent':
+                  'feedback-not-configured',
+              },
+              body: JSON.stringify(
+                createTestFeedbackPayload(),
+              ),
+            },
+          ),
+          {},
+        )
+
+      assert.equal(notConfigured.status, 503)
+
+      const statuses = []
+
+      for (let index = 0; index < 6; index += 1) {
+        const response = await handleFeedback(
+          new Request(
+            'https://example.com/api/feedback',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type':
+                  'application/json',
+                'x-forwarded-for':
+                  '192.0.2.30',
+                'user-agent':
+                  'feedback-rate-test',
+              },
+              body: JSON.stringify(
+                createTestFeedbackPayload({
+                  message: `서로 다른 테스트 의견 ${index}`,
+                }),
+              ),
+            },
+          ),
+          {},
+          async () => undefined,
+        )
+        statuses.push(response.status)
+      }
+
+      assert.deepEqual(statuses.slice(0, 5), [
+        200,
+        200,
+        200,
+        200,
+        200,
+      ])
+      assert.equal(statuses[5], 429)
+    },
+  )
+
+  await check(
+    'Feedback UI: 전송 상태·성공 초기화·실패 내용 유지 구조',
+    () => {
+      const feedbackPage = readFileSync(
+        'src/pages/FeedbackPage.tsx',
+        'utf8',
+      )
+
+      assert.match(feedbackPage, /maxLength=\{\s*FEEDBACK_MESSAGE_MAX_LENGTH/)
+      assert.match(feedbackPage, /보내는 중…/)
+      assert.match(
+        feedbackPage,
+        /setCategory\(''\)[\s\S]*setMessage\(''\)[\s\S]*setContact\(''\)/,
+      )
+      assert.match(
+        feedbackPage,
+        /catch \{[\s\S]*setSubmissionState\('error'\)/,
+      )
+      assert.doesNotMatch(
+        feedbackPage,
+        /catch \{[\s\S]*setMessage\(''\)/,
+      )
     },
   )
 
@@ -889,7 +1747,7 @@ try {
   )
 
   await check(
-    'Shopping 구매: 못 산 품목을 보존하고 다음 목록으로 복원',
+    'Shopping 구매: 못 산 재료를 보존하고 다음 목록으로 복원',
     () => {
       const shoppingItem = {
         id: 'shopping-onion',
@@ -935,7 +1793,7 @@ try {
   )
 
   await check(
-    'Shopping 리마인드: 냉장고 반영·재진입·복원·삭제에서 상태를 보존',
+    'Shopping 리마인드: 명시적으로 못 산 재료만 재진입 시 표시',
     () => {
       const timestamp = '2026-08-01T00:00:00.000Z'
       const baseItems = [
@@ -1029,15 +1887,7 @@ try {
           },
         )
       const shoppingAfterCheckout =
-        markShoppingItemsForReminder(
-          inventoryResult.shoppingItems,
-          [
-            'shopping-apple',
-            'shopping-milk',
-            'shopping-onion',
-          ],
-          '2026-08-02T00:01:00.000Z',
-        )
+        inventoryResult.shoppingItems
       const reminderItems =
         getShoppingReminderItems(
           shoppingAfterCheckout,
@@ -1063,7 +1913,8 @@ try {
           ['우유', 2],
         ],
       )
-      assert.equal(reminderItems.length, 3)
+      assert.equal(reminderItems.length, 1)
+      assert.equal(reminderItems[0].name, '사과')
       assert.equal(
         reminderItems[0].reminderStatus,
         'pending',
@@ -1077,8 +1928,16 @@ try {
         'partial',
       )
       assert.equal(
+        partialItem?.reminderStatus,
+        'none',
+      )
+      assert.equal(
         plannedItem?.purchaseStatus,
         'planned',
+      )
+      assert.equal(
+        plannedItem?.reminderStatus,
+        'none',
       )
       assert.equal(
         shouldShowShoppingReminder(
@@ -1103,7 +1962,7 @@ try {
 
       const restored = restoreShoppingReminderItems(
         shoppingAfterCheckout,
-        ['shopping-apple', 'shopping-milk'],
+        ['shopping-apple'],
         '2026-08-03T00:00:00.000Z',
       )
       assert.equal(restored.length, persisted.length)
@@ -1127,7 +1986,7 @@ try {
         restored.find(
           (item) => item.id === 'shopping-milk',
         )?.purchaseStatus,
-        'planned',
+        'partial',
       )
 
       const deleted = deleteShoppingItems(
@@ -1140,6 +1999,134 @@ try {
           (item) => item.id === 'shopping-banana',
         ),
         true,
+      )
+    },
+  )
+
+  await check(
+    'Shopping 리마인드: 4개 이상은 3개와 나머지 개수로 축약',
+    () => {
+      const reminders = [
+        '대파',
+        '양파',
+        '두부',
+        '달걀',
+        '우유',
+      ]
+      const compact = createShoppingReminderPreview(
+        reminders,
+        false,
+      )
+      const expanded = createShoppingReminderPreview(
+        reminders,
+        true,
+      )
+      const short = createShoppingReminderPreview(
+        reminders.slice(0, 3),
+        false,
+      )
+
+      assert.deepEqual(compact.visibleItems, [
+        '대파',
+        '양파',
+        '두부',
+      ])
+      assert.equal(compact.hiddenCount, 2)
+      assert.equal(compact.canToggle, true)
+      assert.equal(compact.isExpanded, false)
+      assert.deepEqual(expanded.visibleItems, reminders)
+      assert.equal(expanded.hiddenCount, 0)
+      assert.equal(expanded.isExpanded, true)
+      assert.equal(short.canToggle, false)
+      assert.equal(short.visibleItems.length, 3)
+    },
+  )
+
+  await check(
+    'Design QA: 냉장고 반영은 일반 구매 예정 재료를 리마인드로 바꾸지 않음',
+    () => {
+      const shoppingPage = readFileSync(
+        'src/pages/ShoppingPage.tsx',
+        'utf8',
+      )
+
+      assert.doesNotMatch(
+        shoppingPage,
+        /markItemIdsForReminder\s*\(/,
+      )
+      assert.match(
+        shoppingPage,
+        /createShoppingReminderPreview/,
+      )
+      assert.match(shoppingPage, /모두 보기/)
+      assert.match(shoppingPage, /외 \{/)
+    },
+  )
+
+  await check(
+    'Design QA: 장보기·냉장고 사용자 문구는 재료로 통일',
+    () => {
+      const shoppingPage = readFileSync(
+        'src/pages/ShoppingPage.tsx',
+        'utf8',
+      )
+      const inventoryPage = readFileSync(
+        'src/pages/InventoryPage.tsx',
+        'utf8',
+      )
+
+      assert.doesNotMatch(shoppingPage, /품목/)
+      assert.doesNotMatch(inventoryPage, /품목/)
+      assert.match(
+        shoppingPage,
+        /구매한 재료를 냉장고에 넣기/,
+      )
+    },
+  )
+
+  await check(
+    'Planner 저장 안내: 카드 강조와 문구를 2.8초에 함께 종료',
+    () => {
+      const mealPlanPage = readFileSync(
+        'src/pages/MealPlanPage.tsx',
+        'utf8',
+      )
+
+      assert.match(
+        mealPlanPage,
+        /setSavedMealFeedback\(null\)[\s\S]*setHighlightedMealPlanId\(null\)[\s\S]*2?800/,
+      )
+      assert.match(
+        mealPlanPage,
+        /clearSavedMealConfirmation\(\)[\s\S]*setMealName\(event\.target\.value\)/,
+      )
+    },
+  )
+
+  await check(
+    'AI 실패 안내: 무료 체험 미사용 문구를 한 번만 표시',
+    () => {
+      const mealPlanPage = readFileSync(
+        'src/pages/MealPlanPage.tsx',
+        'utf8',
+      )
+      const failureDialogSource =
+        mealPlanPage.slice(
+          mealPlanPage.indexOf(
+            'className="ai-trial-failure-dialog"',
+          ),
+          mealPlanPage.indexOf(
+            '{feedback ?',
+          ),
+        )
+
+      assert.doesNotMatch(
+        failureDialogSource,
+        /ai-trial-failure-note/,
+      )
+      assert.doesNotMatch(
+        failureDialogSource,
+        /무료 체험/,
       )
     },
   )
@@ -1306,6 +2293,879 @@ try {
   )
 
   await check(
+    'AI 식단 체크박스: 실제 input·시각 박스·체크 아이콘을 하나씩만 렌더링',
+    () => {
+      const checkboxSource = mealPlanPageSource.slice(
+        mealPlanPageSource.indexOf(
+          'className="ai-trial-checkbox"',
+        ),
+        mealPlanPageSource.indexOf(
+          '{includesChildren ?',
+        ),
+      )
+      const checkboxCss = appCssSource.slice(
+        appCssSource.indexOf('.ai-trial-checkbox {'),
+        appCssSource.indexOf(
+          '.ai-trial-form .meal-editor__actions',
+        ),
+      )
+
+      assert.equal(
+        checkboxSource.match(/type="checkbox"/g)
+          ?.length,
+        1,
+      )
+      assert.equal(
+        checkboxSource.match(
+          /ai-trial-checkbox__visual/g,
+        )?.length,
+        1,
+      )
+      assert.equal(
+        checkboxSource.match(/<Check\b/g)?.length,
+        1,
+      )
+      assert.match(checkboxCss, /appearance:\s*none/)
+      assert.match(
+        checkboxCss,
+        /-webkit-appearance:\s*none/,
+      )
+      assert.doesNotMatch(
+        checkboxCss,
+        /accent-color/,
+      )
+      assert.match(checkboxCss, /min-height:\s*44px/)
+      assert.match(
+        checkboxCss,
+        /input\[type='checkbox'\]:focus-visible/,
+      )
+      assert.match(
+        checkboxCss,
+        /input\[type='checkbox'\]:checked[\s\S]*svg/,
+      )
+    },
+  )
+
+  await check(
+    'AI 메뉴명: 문장형 이름 보정·차단과 표준 음식명 허용',
+    () => {
+      assert.equal(
+        normalizeAiMenuName(
+          '간장 돼지불고기와 밥',
+        ),
+        '간장불고기',
+      )
+      assert.equal(
+        normalizeAiMenuName(
+          '소고기 미역국과 밥',
+        ),
+        '소고기미역국',
+      )
+      assert.equal(
+        normalizeAiMenuName(
+          '돼지고기 김치없는 볶음밥',
+        ),
+        '돼지고기볶음밥',
+      )
+      assert.equal(
+        normalizeAiMenuName('제육볶음'),
+        '제육볶음',
+      )
+      assert.equal(
+        normalizeAiMenuName('계란볶음밥'),
+        '계란볶음밥',
+      )
+      assert.equal(
+        normalizeAiMenuName(
+          '소고기국과채소',
+        ),
+        null,
+      )
+      assert.equal(
+        normalizeAiMenuName(
+          '아주길고자연스럽지않은가족저녁요리',
+        ),
+        null,
+      )
+
+      const draftApiSource = readFileSync(
+        'api/ai/meal-plan-trial.ts',
+        'utf8',
+      )
+
+      assert.match(
+        draftApiSource,
+        /maxLength: 12/,
+      )
+      assert.match(
+        draftApiSource,
+        /표준 음식명만 2~12자/,
+      )
+      assert.match(
+        draftApiSource,
+        /summary와 recommendationReason에 분리/,
+      )
+    },
+  )
+
+  await check(
+    'AI 재료 단위: 생활 단위 보정과 실사용 분수 반올림',
+    () => {
+      const normalize = (name, quantity, unit = 'g') =>
+        normalizeAiIngredientUnit({
+          name,
+          quantity,
+          unit,
+        })
+
+      assert.deepEqual(normalize('밥', 800), {
+        name: '밥',
+        quantity: 4,
+        unit: '공기',
+      })
+      assert.deepEqual(normalize('양파', 300), {
+        name: '양파',
+        quantity: 2,
+        unit: '개',
+      })
+      assert.deepEqual(
+        normalize('양파', 1.5, '개'),
+        {
+          name: '양파',
+          quantity: 2,
+          unit: '개',
+        },
+      )
+      assert.deepEqual(normalize('감자', 300), {
+        name: '감자',
+        quantity: 2,
+        unit: '개',
+      })
+      assert.deepEqual(normalize('당근', 120), {
+        name: '당근',
+        quantity: 1,
+        unit: '개',
+      })
+      assert.deepEqual(normalize('대파', 100), {
+        name: '대파',
+        quantity: 1,
+        unit: '대',
+      })
+      assert.deepEqual(normalize('달걀', 240), {
+        name: '달걀',
+        quantity: 4,
+        unit: '개',
+      })
+      assert.deepEqual(normalize('두부', 600), {
+        name: '두부',
+        quantity: 2,
+        unit: '모',
+      })
+      assert.deepEqual(normalize('돼지고기', 413), {
+        name: '돼지고기',
+        quantity: 413,
+        unit: 'g',
+      })
+      assert.deepEqual(normalize('물', 700), {
+        name: '물',
+        quantity: 700,
+        unit: 'ml',
+      })
+      assert.deepEqual(normalize('간장', 30), {
+        name: '간장',
+        quantity: 2,
+        unit: '큰술',
+      })
+      assert.deepEqual(normalize('식용유', 15, 'ml'), {
+        name: '식용유',
+        quantity: 1,
+        unit: '큰술',
+      })
+      assert.deepEqual(normalize('다진 마늘', 10), {
+        name: '다진 마늘',
+        quantity: 2,
+        unit: '작은술',
+      })
+      assert.deepEqual(normalize('소금', 2), {
+        name: '소금',
+        quantity: 1,
+        unit: '한 꼬집',
+      })
+      assert.deepEqual(normalize('후추', 1), {
+        name: '후추',
+        quantity: 1,
+        unit: '약간',
+      })
+      assert.deepEqual(normalize('김', 6), {
+        name: '김',
+        quantity: 2,
+        unit: '장',
+      })
+      assert.deepEqual(normalize('참치', 300), {
+        name: '참치',
+        quantity: 2,
+        unit: '캔',
+      })
+      assert.deepEqual(
+        normalize('양파', 0.83, '개'),
+        {
+          name: '양파',
+          quantity: 1,
+          unit: '개',
+        },
+      )
+      const baseIngredient = {
+        name: '감자',
+        quantity: 300,
+        unit: 'g',
+      }
+
+      normalizeAiIngredientUnit(baseIngredient)
+      assert.deepEqual(baseIngredient, {
+        name: '감자',
+        quantity: 300,
+        unit: 'g',
+      })
+
+      const detailApiSource = readFileSync(
+        'api/ai/meal-plan-recipe-detail.ts',
+        'utf8',
+      )
+      const trialEngineSource = readFileSync(
+        'src/services/aiMealPlanTrialEngine.ts',
+        'utf8',
+      )
+
+      assert.match(
+        detailApiSource,
+        /밥은 공기/,
+      )
+      assert.match(
+        detailApiSource,
+        /1 1\/2개, 0\.83개, 1\.25개/,
+      )
+      assert.match(
+        trialEngineSource,
+        /normalizeAiIngredientUnit\(\{/,
+      )
+    },
+  )
+
+  await check(
+    'Real Cooking 단위: 대표 재료 30개를 생활·조리·감각 단위로 표시',
+    () => {
+      const cases = [
+        ['배추김치', 600, 'g', '약 1/4포기'],
+        ['두부', 300, 'g', '1모'],
+        ['대파', 60, 'g', '1/2대'],
+        ['대파', 120, 'g', '1대'],
+        ['팽이버섯', 100, 'g', '1봉'],
+        ['손질 고등어', 600, 'g', '4쪽'],
+        ['손질 오징어', 500, 'g', '2마리'],
+        ['청양고추', 10, 'g', '2개'],
+        ['칵테일 새우', 100, 'g', '약 15개'],
+        ['따뜻한 밥', 800, 'g', '4공기'],
+        ['통마늘', 40, 'g', '10쪽'],
+        ['당근', 38, 'g', '1/2개'],
+        ['쪽파', 25, 'g', '한 줌'],
+        ['레몬', 0.5, '개', '반 개'],
+        ['간 무', 80, 'g', '1토막'],
+        ['달걀지단', 80, 'g', '2개'],
+        ['다진 당근', 38, 'g', '1/2개'],
+        ['양파', 150, 'g', '1개'],
+        ['감자', 300, 'g', '2개'],
+        ['애호박', 150, 'g', '1/2개'],
+        ['깻잎', 20, 'g', '10장'],
+        ['김', 6, 'g', '2장'],
+        ['식빵', 60, 'g', '2장'],
+        ['라면', 240, 'g', '2봉지'],
+        ['우동면', 400, 'g', '2봉'],
+        ['참치캔', 300, 'g', '2캔'],
+        ['소금', 2, 'g', '한 꼬집'],
+        ['후춧가루', 1, 'g', '약간'],
+        ['참치액', 12.5, 'ml', '약 3작은술'],
+        ['참기름', 3.75, 'ml', '약 1/2큰술'],
+      ]
+      const banned =
+        /1 1\/2|12 2\/1|3¾|0\.83|NaN|undefined/
+
+      assert.equal(cases.length, 30)
+
+      for (const [
+        name,
+        quantity,
+        unit,
+        expected,
+      ] of cases) {
+        const presentation =
+          createIngredientUnitPresentation({
+            name,
+            quantity,
+            unit,
+          })
+
+        assert.equal(
+          presentation.displayText,
+          expected,
+          name,
+        )
+        assert.doesNotMatch(
+          presentation.displayText,
+          banned,
+        )
+      }
+    },
+  )
+
+  await check(
+    'Real Cooking 단위: 3·5인분에서도 혼합분수 없이 읽기 쉬운 수량 유지',
+    () => {
+      const baseIngredients = [
+        ['대파', 120, 'g'],
+        ['당근', 76, 'g'],
+        ['참치액', 10, 'ml'],
+        ['참기름', 15, 'ml'],
+        ['밥', 800, 'g'],
+      ]
+      const banned =
+        /1 1\/2|12 2\/1|3¾|0\.83|NaN|undefined/
+
+      for (const servings of [3, 5]) {
+        for (const [
+          name,
+          quantity,
+          unit,
+        ] of baseIngredients) {
+          const presentation =
+            createIngredientUnitPresentation({
+              name,
+              quantity:
+                quantity * (servings / 4),
+              unit,
+            })
+
+          assert.doesNotMatch(
+            presentation.displayText,
+            banned,
+          )
+        }
+      }
+    },
+  )
+
+  await check(
+    '식단 장보기 저장: 기존 목록을 보존하고 같은 기간의 부족분만 새 batch로 추가',
+    () => {
+      const currentItems = [
+        {
+          id: 'manual-1',
+          name: '우유',
+          completed: false,
+          source: 'manual',
+          createdAt: '2026-07-30T00:00:00.000Z',
+          updatedAt: '2026-07-30T00:00:00.000Z',
+        },
+        {
+          id: 'old-range',
+          name: '양파',
+          quantity: 1,
+          unit: '개',
+          completed: false,
+          source: 'meal',
+          sourceId:
+            'meal-plan-range:2026-07-30:week',
+          createdAt: '2026-07-30T00:00:00.000Z',
+          updatedAt: '2026-07-30T00:00:00.000Z',
+        },
+        {
+          id: 'other-range',
+          name: '두부',
+          quantity: 1,
+          unit: '모',
+          completed: false,
+          source: 'meal',
+          sourceId:
+            'meal-plan-range:2026-08-06:week',
+          createdAt: '2026-07-30T00:00:00.000Z',
+          updatedAt: '2026-07-30T00:00:00.000Z',
+        },
+      ]
+      const sourceId =
+        'meal-plan-range:2026-07-30:week'
+      const first = replaceMealPlanRangeShoppingItems(
+        currentItems,
+        sourceId,
+        [
+          {
+            id: 'ingredient-1',
+            name: '양파',
+            quantity: 2,
+            unit: '개',
+          },
+        ],
+      )
+      const second = replaceMealPlanRangeShoppingItems(
+        first.items,
+        sourceId,
+        [
+          {
+            id: 'ingredient-1',
+            name: '양파',
+            quantity: 2,
+            unit: '개',
+          },
+        ],
+      )
+
+      assert.equal(first.generatedItems.length, 1)
+      assert.equal(
+        first.items.filter(
+          (item) => item.sourceId === sourceId,
+        ).length,
+        2,
+      )
+      assert.equal(
+        first.items
+          .filter(
+            (item) => item.sourceId === sourceId,
+          )
+          .reduce(
+            (sum, item) =>
+              sum + (item.quantity ?? 0),
+            0,
+          ),
+        2,
+      )
+      assert.ok(
+        first.items.some(
+          (item) => item.id === 'old-range',
+        ),
+      )
+      assert.ok(
+        first.items.some(
+          (item) => item.id === 'manual-1',
+        ),
+      )
+      assert.ok(
+        first.items.some(
+          (item) => item.id === 'other-range',
+        ),
+      )
+      assert.equal(
+        second.items.filter(
+          (item) => item.sourceId === sourceId,
+        ).length,
+        2,
+      )
+      assert.equal(second.generatedItems.length, 0)
+      assert.equal(
+        replaceMealPlanRangeShoppingItems(
+          second.items,
+          sourceId,
+          [],
+        ).generatedItems.length,
+        0,
+      )
+
+      const missedItem = {
+        ...currentItems[1],
+        purchaseStatus: 'not-purchased',
+        reminderStatus: 'pending',
+      }
+      const replacementWithReminder =
+        replaceMealShoppingSourceItems(
+          [currentItems[0], missedItem],
+          sourceId,
+          [
+            {
+              id: 'ingredient-reminder',
+              name: '양파',
+              quantity: 2,
+              unit: '개',
+            },
+          ],
+        )
+
+      assert.equal(
+        replacementWithReminder.items.filter(
+          (item) => item.name === '양파',
+        ).length,
+        1,
+      )
+      assert.equal(
+        replacementWithReminder.items.find(
+          (item) => item.name === '양파',
+        )?.purchaseStatus,
+        'not-purchased',
+      )
+
+      const shoppingHandler =
+        mealPlanPageSource.slice(
+          mealPlanPageSource.indexOf(
+            'function handleCreateShoppingList',
+          ),
+          mealPlanPageSource.indexOf(
+            'function handleGenerateAiTrial',
+          ),
+        )
+
+      assert.match(
+        shoppingHandler,
+        /if \(itemCount === 0\)/,
+      )
+      assert.match(
+        shoppingHandler,
+        /장보기 목록을 저장하지 못했어요/,
+      )
+      assert.ok(
+        shoppingHandler.indexOf(
+          'if (itemCount === 0)',
+        ) <
+          shoppingHandler.indexOf(
+            '장보기 목록을 만들었어요',
+          ),
+      )
+    },
+  )
+
+  await check(
+    '장보기 상태 모델: 구매·못 삼·planned와 새 batch를 보존하고 냉장고 전송은 멱등',
+    () => {
+      const timestamp = '2026-08-01T00:00:00.000Z'
+      const sourceA = Array.from(
+        { length: 10 },
+        (_, index) => ({
+          id: `source-a-${index + 1}`,
+          name: `재료A${index + 1}`,
+          quantity: 1,
+          unit: '개',
+          completed: false,
+          source: 'meal',
+          sourceId: 'meal-plan-range:a',
+          sourceKind: 'meal_plan',
+          sourceRecipeName: '레시피 A',
+          sourceMealDate: '2026-08-01',
+          batchId: 'batch-a',
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        }),
+      )
+      let shopping = updateShoppingPurchase(
+        sourceA,
+        sourceA.slice(0, 4).map((item) => item.id),
+        {
+          mode: 'single',
+          purchasedQuantity: 4,
+        },
+        timestamp,
+      )
+
+      shopping = updateShoppingPurchase(
+        shopping,
+        sourceA.slice(4, 6).map((item) => item.id),
+        {
+          mode: 'single',
+          purchasedQuantity: 0,
+          notPurchased: true,
+        },
+        timestamp,
+      )
+
+      let nextInventoryId = 0
+      const firstTransfer =
+        mergeCompletedShoppingIntoInventory(
+          [],
+          shopping,
+          {
+            createId: () =>
+              `inventory-${++nextInventoryId}`,
+            createApplicationId: () =>
+              `transfer-${++nextInventoryId}`,
+            now: timestamp,
+          },
+        )
+
+      assert.equal(
+        firstTransfer.inventoryItems.length,
+        4,
+      )
+      assert.equal(
+        getShoppingReminderItems(
+          firstTransfer.shoppingItems,
+        ).length,
+        2,
+      )
+      assert.equal(
+        firstTransfer.shoppingItems.filter(
+          (item) =>
+            item.purchaseStatus === 'planned',
+        ).length,
+        4,
+      )
+
+      const sourceB =
+        replaceMealPlanRangeShoppingItems(
+          firstTransfer.shoppingItems,
+          'meal-plan-range:b',
+          Array.from(
+            { length: 3 },
+            (_, index) => ({
+              id: `ingredient-b-${index + 1}`,
+              name: `재료B${index + 1}`,
+              quantity: 1,
+              unit: '개',
+            }),
+          ),
+          {
+            sourceKind: 'meal_plan',
+            sourceRecipeName: '레시피 B',
+            sourceMealDate: '2026-08-08',
+            batchId: 'batch-b',
+          },
+        )
+
+      assert.equal(
+        getShoppingReminderItems(
+          sourceB.items,
+        ).length,
+        2,
+      )
+      assert.equal(
+        sourceB.generatedItems.length,
+        3,
+      )
+      assert.ok(
+        sourceB.generatedItems.every(
+          (item) =>
+            item.batchId === 'batch-b' &&
+            item.sourceRecipeName === '레시피 B',
+        ),
+      )
+
+      const purchasedB = updateShoppingPurchase(
+        sourceB.items,
+        sourceB.generatedItems.map(
+          (item) => item.id,
+        ),
+        {
+          mode: 'single',
+          purchasedQuantity: 3,
+        },
+        timestamp,
+      )
+      const secondTransfer =
+        mergeCompletedShoppingIntoInventory(
+          firstTransfer.inventoryItems,
+          purchasedB,
+          {
+            createId: () =>
+              `inventory-${++nextInventoryId}`,
+            createApplicationId: () =>
+              `transfer-${++nextInventoryId}`,
+            now: timestamp,
+          },
+        )
+      const repeatedTransfer =
+        mergeCompletedShoppingIntoInventory(
+          secondTransfer.inventoryItems,
+          secondTransfer.shoppingItems,
+          {
+            createId: () =>
+              `inventory-${++nextInventoryId}`,
+            createApplicationId: () =>
+              `transfer-${++nextInventoryId}`,
+            now: timestamp,
+          },
+        )
+
+      assert.equal(
+        secondTransfer.inventoryItems.length,
+        7,
+      )
+      assert.equal(
+        repeatedTransfer.inventoryItems.length,
+        7,
+      )
+      assert.equal(
+        repeatedTransfer.appliedShoppingItemIds
+          .length,
+        0,
+      )
+      assert.equal(
+        getShoppingReminderItems(
+          JSON.parse(
+            JSON.stringify(
+              secondTransfer.shoppingItems,
+            ),
+          ),
+        ).length,
+        2,
+      )
+    },
+  )
+
+  await check(
+    '하단 레시피 탭과 냉장고: 목록 기본 진입과 Refrigerator 아이콘 유지',
+    () => {
+      const appSource = readFileSync(
+        'src/App.tsx',
+        'utf8',
+      )
+      const bottomNavigationSource = readFileSync(
+        'src/components/BottomNavigation.tsx',
+        'utf8',
+      )
+
+      assert.match(
+        appSource,
+        /case 'recipes':[\s\S]*<RecipePage/,
+      )
+      assert.match(
+        bottomNavigationSource,
+        /page: 'recipes'[\s\S]*label: '레시피'/,
+      )
+      assert.match(
+        bottomNavigationSource,
+        /import \{[\s\S]*Refrigerator[\s\S]*\} from 'lucide-react'/,
+      )
+      assert.match(
+        bottomNavigationSource,
+        /label: '냉장고',[\s\S]*icon: Refrigerator/,
+      )
+      assert.doesNotMatch(
+        bottomNavigationSource,
+        /label: '냉장고',[\s\S]*icon: PackageOpen/,
+      )
+    },
+  )
+
+  await check(
+    'Recipe 이미지: 정확한 ID·표준 메뉴명·명시적 별칭만 매칭',
+    () => {
+      const exactId = resolveRecipeImage(
+        'kimchi-stew',
+        '다른 이름',
+      )
+      const exactName = resolveRecipeImage(
+        'ai-trial-1',
+        '카레',
+      )
+      const alias = resolveRecipeImage(
+        'ai-trial-2',
+        '카레라이스',
+      )
+      const ambiguous = resolveRecipeImage(
+        'ai-trial-3',
+        '연어 채소 덮밥',
+      )
+      const unknown = resolveRecipeImage(
+        'ai-trial-4',
+        '새로운 가족 메뉴',
+      )
+
+      assert.equal(exactId?.match, 'id')
+      assert.equal(exactId?.imageKey, 'kimchi-stew')
+      assert.equal(exactName?.match, 'name')
+      assert.equal(exactName?.imageKey, 'curry')
+      assert.equal(alias?.match, 'alias')
+      assert.equal(alias?.imageKey, 'curry')
+      assert.equal(ambiguous, null)
+      assert.equal(unknown, null)
+    },
+  )
+
+  await check(
+    'AI 메뉴 이미지: 7개 순서 독립 exact 매칭과 미매칭 placeholder 유지',
+    () => {
+      const menuNames = [
+        '김치찌개',
+        '고등어구이',
+        '소고기미역국',
+        '닭갈비',
+        '계란볶음밥',
+        '카레',
+        '두부조림',
+      ]
+      const firstPass = menuNames.map((name, index) =>
+        resolveRecipeImage(`ai-menu-${index}`, name),
+      )
+      const reorderedPass = [...menuNames]
+        .reverse()
+        .map((name, index) =>
+          resolveRecipeImage(
+            `reordered-ai-menu-${index}`,
+            name,
+          ),
+        )
+        .reverse()
+
+      assert.deepEqual(
+        firstPass.map((result) => result?.imageKey),
+        [
+          'kimchi-stew',
+          'grilled-mackerel',
+          'beef-seaweed-soup',
+          'chicken-galbi',
+          'egg-fried-rice',
+          'curry',
+          'braised-tofu',
+        ],
+      )
+      assert.deepEqual(
+        reorderedPass.map(
+          (result) => result?.imageKey,
+        ),
+        firstPass.map(
+          (result) => result?.imageKey,
+        ),
+      )
+      assert.ok(
+        firstPass.every(
+          (result) =>
+            result &&
+            Object.values(recipeImages).includes(
+              result.src,
+            ),
+        ),
+      )
+      assert.equal(
+        resolveRecipeImage(
+          'unknown-id',
+          '연어 채소 덮밥',
+        ),
+        null,
+      )
+      assert.match(
+        mealPlanPageSource,
+        /ai-trial-recipe-card__image--placeholder/,
+      )
+      assert.match(
+        recipePageSource.slice(
+          recipePageSource.indexOf(
+            'function RecipePhoto',
+          ),
+          recipePageSource.indexOf(
+            'function RecipePage',
+          ),
+        ),
+        /data-image-match="placeholder"/,
+      )
+      assert.match(
+        appCssSource,
+        /\.ai-trial-recipe-card__image[\s\S]*object-fit:\s*cover/,
+      )
+      assert.doesNotMatch(
+        `${mealPlanPageSource}${recipePageSource}${homePageSource}`,
+        /음식 사진 준비 중|사진 준비 중/,
+      )
+      assert.match(
+        `${mealPlanPageSource}${recipePageSource}${homePageSource}`,
+        /대표 사진 없음/,
+      )
+    },
+  )
+
+  await check(
     'Premium Recipe: 4인분 기준 수량을 1~12인분으로 안전하게 조절',
     () => {
       assert.equal(scaleRecipeAmount(600, 4, 2), 300)
@@ -1314,8 +3174,11 @@ try {
       assert.equal(formatRecipeAmount(1.5), '1½')
       assert.equal(
         formatRecipeAmount(0.63, '개'),
-        '2/3',
+        '1/2',
       )
+      assert.equal(formatRecipeAmount(1.5, '개'), '2')
+      assert.equal(formatRecipeAmount(1.25, '개'), '1')
+      assert.equal(formatRecipeAmount(1, '약간'), '')
       assert.equal(formatRecipeAmount(1, '개'), '1')
       assert.equal(formatRecipeAmount(22.5, 'g'), '23')
       assert.equal(
@@ -1536,10 +3399,27 @@ try {
         null,
         '?page=recipes&recipe=curry',
       )
+      const inventoryRecommendation =
+        readNavigationState(
+          null,
+          '?page=recipes&fromInventory=1',
+        )
 
       assert.equal(restored.recipeId, 'kimchi-stew')
       assert.equal(direct.page, 'recipes')
       assert.equal(direct.recipeId, 'curry')
+      assert.equal(
+        inventoryRecommendation
+          .showInventoryRecommendations,
+        true,
+      )
+      assert.equal(
+        createNavigationUrl(
+          inventoryRecommendation,
+          'https://example.com/',
+        ),
+        '/?page=recipes&fromInventory=1',
+      )
       assert.equal(
         createNavigationUrl(
           detailState,
@@ -1596,7 +3476,10 @@ try {
           mealPlan,
           'shopping',
         ),
-        { kind: 'replace' },
+        {
+          kind: 'back-and-replace',
+          delta: -1,
+        },
       )
       assert.deepEqual(
         planTopLevelNavigation(
@@ -1605,7 +3488,7 @@ try {
         ),
         {
           kind: 'back-and-replace',
-          delta: -1,
+          delta: -2,
         },
       )
       assert.deepEqual(
@@ -2526,19 +4409,19 @@ try {
     () => {
       const timeout =
         getAiMealPlanTrialFailureState(
-          'AI_TRIAL_TIMEOUT',
+          'PIPELINE_TIMEOUT',
         )
       const invalid =
         getAiMealPlanTrialFailureState(
-          'AI_RESPONSE_INVALID',
+          'SCHEMA_VALIDATION_FAILED',
         )
 
       assert.equal(timeout.trialConsumed, false)
       assert.equal(timeout.canRetry, true)
-      assert.match(timeout.title, /시간/)
+      assert.match(timeout.title, /완성/)
       assert.equal(invalid.trialConsumed, false)
       assert.equal(invalid.canRetry, true)
-      assert.match(invalid.title, /안전/)
+      assert.match(invalid.title, /완성/)
     },
   )
 
@@ -2668,6 +4551,10 @@ try {
       assert.equal(body.days.length, 7)
       assert.equal(body.recipes, undefined)
       assert.equal(body.meta.model, 'mock')
+      assert.deepEqual(
+        body.days.map((day) => day.name),
+        aiTestMenuNames,
+      )
     },
   )
 
@@ -2688,7 +4575,7 @@ try {
             { length: 7 },
             (_, index) => ({
               day: index + 1,
-              name: `맞춤 메뉴 ${index + 1}`,
+              name: aiTestMenuNames[index],
               summary: '가족 저녁 메뉴예요.',
               recommendationReason:
                 '가족 조건을 반영했어요.',
@@ -2739,6 +4626,59 @@ try {
   )
 
   await check(
+    'AI 상세 생성 상태: recipeId별 loading·error·retry·success 독립',
+    () => {
+      let states = {}
+
+      states = updateRecipeDetailGenerationState(
+        states,
+        'recipe-day-1',
+        'loading',
+      )
+      states = updateRecipeDetailGenerationState(
+        states,
+        'recipe-day-2',
+        'loading',
+      )
+      states = updateRecipeDetailGenerationState(
+        states,
+        'recipe-day-2',
+        'error',
+        '시간이 오래 걸리고 있어요.',
+      )
+
+      assert.equal(
+        states['recipe-day-1'].status,
+        'loading',
+      )
+      assert.equal(
+        states['recipe-day-2'].status,
+        'error',
+      )
+
+      states = updateRecipeDetailGenerationState(
+        states,
+        'recipe-day-2',
+        'loading',
+      )
+      states = updateRecipeDetailGenerationState(
+        states,
+        'recipe-day-2',
+        'success',
+      )
+
+      assert.equal(
+        states['recipe-day-1'].status,
+        'loading',
+      )
+      assert.equal(
+        states['recipe-day-2'].status,
+        'success',
+      )
+    },
+  )
+
+  await check(
     'AI 7일 체험 Phase 2: 첫 상세 저장 후에만 사용 완료·정확 장보기 계산',
     async () => {
       const trialRequest = {
@@ -2755,7 +4695,7 @@ try {
             { length: 7 },
             (_, index) => ({
               day: index + 1,
-              name: `저녁 메뉴 ${index + 1}`,
+              name: aiTestMenuNames[index],
               summary: '가족 저녁 메뉴예요.',
               recommendationReason:
                 '냉장고 조건을 반영했어요.',
@@ -2831,6 +4771,12 @@ try {
           'ai',
           detailBody.meta,
           '2026-08-03T00:01:00.000Z',
+          false,
+        )
+      const finalized =
+        completeStoredAiMealPlanTrial(
+          completed,
+          '2026-08-03T00:02:00.000Z',
         )
 
       assert.equal(response.status, 200)
@@ -2838,11 +4784,12 @@ try {
         detailBody.recipe.steps.length,
         8,
       )
-      assert.equal(completed?.status, 'completed')
+      assert.equal(completed?.status, 'draft')
       assert.equal(
         completed?.usedAt,
-        '2026-08-03T00:01:00.000Z',
+        undefined,
       )
+      assert.equal(finalized, null)
       assert.equal(
         completed?.response.recipes.length,
         1,
@@ -2850,6 +4797,704 @@ try {
       assert.ok(
         completed.response
           .weeklyShoppingIngredients.length > 0,
+      )
+
+      let sequentialTrial = completed
+
+      for (const dayIndex of [
+        1, 2, 3, 4, 5, 6,
+      ]) {
+        const nextDetailRequest = {
+          day: sequentialTrial.response.days[dayIndex],
+          householdSize: 4,
+          includesChildren: false,
+          spicePreference: 'mild',
+        }
+        const validation =
+          validateAiMealPlanRecipeDetailRequest(
+            nextDetailRequest,
+          )
+
+        assert.equal(validation.ok, true)
+
+        const nextResponse =
+          await handleAiMealPlanRecipeDetail(
+            new Request(
+              'http://localhost/api/ai/meal-plan-recipe-detail',
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type':
+                    'application/json',
+                },
+                body: JSON.stringify(
+                  nextDetailRequest,
+                ),
+              },
+            ),
+            {
+              NODE_ENV: 'development',
+              HOMEOS_AI_MOCK: 'true',
+            },
+          )
+        const nextBody = await nextResponse.json()
+
+        assert.equal(nextResponse.status, 200)
+        sequentialTrial =
+          addRecipeToStoredAiMealPlanTrial(
+            sequentialTrial,
+            nextBody.recipe,
+            'ai',
+            nextBody.meta,
+            `2026-08-03T00:0${dayIndex + 2}:00.000Z`,
+            false,
+          )
+      }
+
+      const finalizedTrial =
+        completeStoredAiMealPlanTrial(
+          sequentialTrial,
+          '2026-08-03T00:09:00.000Z',
+        )
+
+      assert.equal(
+        sequentialTrial.response.recipes.length,
+        7,
+      )
+      assert.equal(
+        sequentialTrial.status,
+        'draft',
+      )
+      assert.equal(
+        sequentialTrial.usedAt,
+        undefined,
+      )
+      assert.equal(
+        finalizedTrial.status,
+        'completed',
+      )
+      assert.equal(
+        finalizedTrial.usedAt,
+        '2026-08-03T00:09:00.000Z',
+      )
+      assert.deepEqual(
+        sequentialTrial.response.recipes.map(
+          (recipe) => recipe.name,
+        ),
+        aiTestMenuNames,
+      )
+      assert.equal(
+        'dayLabel' in
+          sequentialTrial.response.days[1],
+        false,
+      )
+      assert.equal(
+        sequentialTrial.response.plans[1].name,
+        sequentialTrial.response.days[1].name,
+      )
+    },
+  )
+
+  await check(
+    'Final Polish: 미구매 진입점·다시 살 재료 그룹·자연스러운 문구',
+    () => {
+      const shoppingPage = readFileSync(
+        'src/pages/ShoppingPage.tsx',
+        'utf8',
+      )
+
+      assert.match(
+        shoppingPage,
+        /shopping-item__more/,
+      )
+      assert.match(
+        shoppingPage,
+        /재료나 오른쪽 더보기 버튼을 눌러 실제[\s\S]*이번에 못 산 재료로[\s\S]*남길 수 있어요/,
+      )
+      assert.match(shoppingPage, /title="다시 살 재료"/)
+      assert.match(
+        shoppingPage,
+        /이번 장보기에 포함/,
+      )
+      assert.match(
+        shoppingPage,
+        /이번 목록에서 제외/,
+      )
+      assert.match(
+        shoppingPage,
+        /이번에는 못 샀어요/,
+      )
+      assert.match(
+        shoppingPage,
+        /다음 장보기에 다시 알려드려요/,
+      )
+    },
+  )
+
+  await check(
+    'Final Polish: 구매 단위와 요약은 현재 재료 표시 단위를 사용',
+    () => {
+      const shoppingPage = readFileSync(
+        'src/pages/ShoppingPage.tsx',
+        'utf8',
+      )
+
+      assert.match(
+        shoppingPage,
+        /label=\{`실제 구매 수량 \(\$\{selectedPurchaseUnit\}\)`\}/,
+      )
+      assert.match(
+        shoppingPage,
+        /formatShoppingQuantity\(\s*selectedPurchaseItem\.name,\s*effectivePurchasedQuantity,\s*selectedPurchaseUnit/,
+      )
+      assert.doesNotMatch(
+        shoppingPage,
+        /총 \{effectivePurchasedQuantity\}\s*\{selectedPurchaseUnit\}/,
+      )
+    },
+  )
+
+  await check(
+    'Final Polish: 최근 14일 메뉴 제외와 조리 유형 다양성',
+    () => {
+      const recentNames =
+        getRecentMealPlanMenuNames(
+          [
+            {
+              date: '2026-07-30',
+              name: '감자조림',
+            },
+            {
+              date: '2026-07-20',
+              name: '두부조림',
+            },
+            {
+              date: '2026-07-10',
+              name: '오래된 메뉴',
+            },
+          ],
+          '2026-07-31',
+        )
+
+      assert.deepEqual(recentNames, [
+        '감자조림',
+        '두부조림',
+      ])
+      assert.equal(
+        classifyAiMealCookingType('소고기미역국'),
+        'soup-stew',
+      )
+      assert.equal(
+        classifyAiMealCookingType('김치볶음밥'),
+        'rice-noodle',
+      )
+
+      const request = {
+        startDate: '2026-07-31',
+        householdSize: 4,
+        includesChildren: false,
+        spicePreference: 'mild',
+        weekdayMaxMinutes: 40,
+        inventoryItems: [],
+        recentMenuNames: ['감자조림'],
+      }
+      const menuNames = [
+        '감자조림',
+        '된장찌개',
+        '제육볶음',
+        '고등어구이',
+        '김치볶음밥',
+        '달걀찜',
+        '애호박전',
+      ]
+      const output = {
+        days: menuNames.map((name, index) => ({
+          day: index + 1,
+          name,
+          summary: '가족 저녁 메뉴예요.',
+          recommendationReason:
+            '가족 조건을 반영했어요.',
+          servings: 4,
+          prepMinutes: 10,
+          cookMinutes: 25,
+          mainIngredientNames: [
+            `주재료 ${index + 1}`,
+          ],
+          missingIngredientNames: [],
+          constraintCompliance:
+            '제외 조건을 모두 지켰어요.',
+        })),
+      }
+      const recentDuplicate =
+        parseAiMealPlanDraftOutputResult(
+          output,
+          request,
+        )
+
+      assert.equal(recentDuplicate.ok, false)
+      assert.equal(
+        recentDuplicate.reason,
+        'RECENT_MENU_DUPLICATE',
+      )
+
+      const tooManyBraises = {
+        days: [
+          '감자조림',
+          '두부조림',
+          '연근조림',
+          '된장찌개',
+          '제육볶음',
+          '고등어구이',
+          '김치볶음밥',
+        ].map((name, index) => ({
+          ...output.days[index],
+          name,
+        })),
+      }
+      const diversityFailure =
+        parseAiMealPlanDraftOutputResult(
+          tooManyBraises,
+          {
+            ...request,
+            recentMenuNames: [],
+          },
+        )
+
+      assert.equal(diversityFailure.ok, false)
+      assert.equal(
+        diversityFailure.reason,
+        'DIVERSITY_VIOLATION',
+      )
+    },
+  )
+
+  await check(
+    'Final Polish: 정확한 사진이 없으면 축소된 단일 음식 아이콘 상태 사용',
+    () => {
+      const recipePage = readFileSync(
+        'src/pages/RecipePage.tsx',
+        'utf8',
+      )
+      const homePage = readFileSync(
+        'src/pages/HomePage.tsx',
+        'utf8',
+      )
+      const mealPlanPage = readFileSync(
+        'src/pages/MealPlanPage.tsx',
+        'utf8',
+      )
+      const recipeCss = readFileSync(
+        'src/pages/RecipePage.css',
+        'utf8',
+      )
+
+      assert.match(recipePage, /recipe-photo--empty/)
+      assert.match(
+        recipePage,
+        /대표 사진이 아직 없어요/,
+      )
+      assert.match(
+        recipePage,
+        /레시피는 정상적으로 이용할 수 있습니다/,
+      )
+      assert.match(
+        homePage,
+        /home-hero__visual--empty/,
+      )
+      assert.match(
+        homePage,
+        /home-hero__shopping-link[\s\S]*장보기 목록 보기/,
+      )
+      assert.match(
+        mealPlanPage,
+        /ai-trial-recipe-card__image--placeholder/,
+      )
+      assert.match(
+        mealPlanPage,
+        /레시피는 정상적으로 이용할 수 있습니다/,
+      )
+      assert.match(
+        recipeCss,
+        /\.recipe-photo--empty[\s\S]*height: 80px/,
+      )
+      assert.doesNotMatch(
+        recipePage,
+        /오늘식탁 · 대표 사진 없음/,
+      )
+    },
+  )
+
+  await check(
+    'Final Polish: 재료 수량 색상과 하단 safe-area 토큰 통일',
+    () => {
+      const recipeCss = readFileSync(
+        'src/pages/RecipePage.css',
+        'utf8',
+      )
+      const appCss = readFileSync(
+        'src/App.css',
+        'utf8',
+      )
+      const uiCss = readFileSync(
+        'src/components/ui/ui.css',
+        'utf8',
+      )
+      const themeCss = readFileSync(
+        'src/styles/theme.css',
+        'utf8',
+      )
+
+      assert.match(
+        recipeCss,
+        /\.recipe-ingredient-list \.ui-number \{[\s\S]*color: var\(--color-ingredient-quantity\)/,
+      )
+      assert.match(
+        themeCss,
+        /--color-ingredient-quantity: var\(--color-primary-dark\)/,
+      )
+      assert.match(
+        themeCss,
+        /--bottom-nav-height: 88px/,
+      )
+      assert.match(
+        appCss,
+        /var\(--bottom-nav-height\)[\s\S]*env\(safe-area-inset-bottom, 0px\)[\s\S]*var\(--space-6\)/,
+      )
+      assert.match(
+        uiCss,
+        /\.ui-dialog__footer \{[\s\S]*env\(safe-area-inset-bottom, 0px\)/,
+      )
+    },
+  )
+
+  await check(
+    'AI 7일 체험 Phase 1: 평일 조리시간 초과를 안전하게 사용자 상한으로 정규화',
+    () => {
+      const request = {
+        startDate: '2026-08-03',
+        householdSize: 4,
+        includesChildren: false,
+        spicePreference: 'mild',
+        weekdayMaxMinutes: 40,
+        inventoryItems: [],
+      }
+      const result = parseAiMealPlanDraftOutputResult(
+        {
+          days: Array.from(
+            { length: 7 },
+            (_, index) => ({
+              day: index + 1,
+              name: aiTestMenuNames[index],
+              summary: '가족 저녁 메뉴예요.',
+              recommendationReason:
+                '가족 조건을 반영했어요.',
+              servings: 4,
+              prepMinutes: 10,
+              cookMinutes: index === 0 ? 55 : 25,
+              mainIngredientNames: [
+                `주재료 ${index + 1}`,
+              ],
+              missingIngredientNames: [],
+              constraintCompliance:
+                '제외 조건을 모두 지켰어요.',
+            }),
+          ),
+        },
+        request,
+      )
+
+      assert.equal(result.ok, true)
+      assert.equal(result.data.days[0].cookMinutes, 40)
+    },
+  )
+  await check(
+    'Release blocker: AI pipeline traces every stage and completes only after seven details',
+    () => {
+      const mealPlanPage = readFileSync(
+        'src/pages/MealPlanPage.tsx',
+        'utf8',
+      )
+      const trialHook = readFileSync(
+        'src/hooks/useAiMealPlanTrial.ts',
+        'utf8',
+      )
+
+      assert.match(
+        mealPlanPage,
+        /for \(const day of trial\.response\.days\)/,
+      )
+      assert.match(
+        mealPlanPage,
+        /savedCount !==[\s\S]*detailedTrial\.response\.days\.length/,
+      )
+      assert.match(
+        mealPlanPage,
+        /beginStage\('PLANNER_SAVE'\)[\s\S]*beginStage\('SHOPPING_PREPARE'\)[\s\S]*beginStage\('TRIAL_COMPLETE'\)/,
+      )
+      assert.match(
+        mealPlanPage,
+        /if \(plannerApplied\)[\s\S]*replaceAllMealPlans\(previousMealPlans\)[\s\S]*replaceAllShoppingItems/,
+      )
+      assert.match(
+        trialHook,
+        /traceId: request\.traceId/,
+      )
+      assert.equal(
+        mapAiMealPlanPipelineErrorCode(
+          'OPENAI_TIMEOUT',
+          'NETWORK_ERROR',
+        ),
+        'OPENAI_TIMEOUT',
+      )
+      assert.equal(
+        createAiMealPlanPipelineError(
+          { code: 'AI_NOT_CONFIGURED' },
+          'DRAFT_GENERATION',
+          'NETWORK_ERROR',
+          'failed',
+        ).code,
+        'API_ENV_MISSING',
+      )
+    },
+  )
+
+  await check(
+    'Release blocker: shopping keeps 2 planned and 2 reminders while adding a separate 3-item batch',
+    () => {
+      const currentItems = [
+        {
+          id: 'planned-onion',
+          name: '양파',
+          quantity: 2,
+          unit: '개',
+          completed: false,
+          source: 'meal',
+          sourceId: 'existing-plan',
+          batchId: 'batch-a',
+          purchaseStatus: 'planned',
+          reminderStatus: 'none',
+          createdAt: '2026-07-31T00:00:00.000Z',
+          updatedAt: '2026-07-31T00:00:00.000Z',
+        },
+        {
+          id: 'planned-tofu',
+          name: '두부',
+          quantity: 1,
+          unit: '모',
+          completed: false,
+          source: 'meal',
+          sourceId: 'existing-plan',
+          batchId: 'batch-a',
+          purchaseStatus: 'planned',
+          reminderStatus: 'none',
+          createdAt: '2026-07-31T00:00:00.000Z',
+          updatedAt: '2026-07-31T00:00:00.000Z',
+        },
+        {
+          id: 'missed-leek',
+          name: '대파',
+          quantity: 1,
+          unit: '대',
+          completed: false,
+          source: 'meal',
+          sourceId: 'older-plan',
+          batchId: 'batch-reminder',
+          purchaseStatus: 'not-purchased',
+          reminderStatus: 'pending',
+          inventoryAppliedQuantity: 0,
+          createdAt: '2026-07-30T00:00:00.000Z',
+          updatedAt: '2026-07-30T00:00:00.000Z',
+        },
+        {
+          id: 'missed-carrot',
+          name: '당근',
+          quantity: 1,
+          unit: '개',
+          completed: false,
+          source: 'meal',
+          sourceId: 'older-plan',
+          batchId: 'batch-reminder',
+          purchaseStatus: 'not-purchased',
+          reminderStatus: 'pending',
+          inventoryAppliedQuantity: 0,
+          createdAt: '2026-07-30T00:00:00.000Z',
+          updatedAt: '2026-07-30T00:00:00.000Z',
+        },
+      ]
+      const before = structuredClone(currentItems)
+      const result =
+        replaceMealPlanRangeShoppingItems(
+          currentItems,
+          'new-week-plan',
+          [
+            {
+              id: 'potato',
+              name: '감자',
+              quantity: 2,
+              unit: '개',
+            },
+            {
+              id: 'meat',
+              name: '고기',
+              quantity: 500,
+              unit: 'g',
+            },
+            {
+              id: 'soy-sauce',
+              name: '간장',
+              quantity: 3,
+              unit: '큰술',
+            },
+          ],
+          {
+            batchId: 'batch-b',
+            sourceKind: 'meal_plan',
+          },
+        )
+
+      assert.equal(result.items.length, 7)
+      assert.deepEqual(
+        result.items.slice(0, 4),
+        before,
+      )
+      assert.equal(result.generatedItems.length, 3)
+      assert.ok(
+        result.generatedItems.every(
+          (item) =>
+            item.batchId === 'batch-b' &&
+            item.sourceId === 'new-week-plan',
+        ),
+      )
+      assert.equal(
+        result.items.filter(
+          (item) =>
+            item.purchaseStatus ===
+              'not-purchased' &&
+            item.reminderStatus === 'pending',
+        ).length,
+        2,
+      )
+    },
+  )
+
+  await check(
+    'Release blocker: reminder actions keep one primary action and an accessible 44px overflow menu',
+    () => {
+      const shoppingPage = readFileSync(
+        'src/pages/ShoppingPage.tsx',
+        'utf8',
+      )
+      const uiCss = readFileSync(
+        'src/components/ui/ui.css',
+        'utf8',
+      )
+
+      assert.match(
+        shoppingPage,
+        /shopping-reminder__more-actions/,
+      )
+      assert.match(
+        shoppingPage,
+        /다시 살 재료 추가 동작 열기/,
+      )
+      assert.match(
+        shoppingPage,
+        /shopping-reminder-actions-sheet/,
+      )
+      assert.match(
+        uiCss,
+        /\.shopping-reminder__more-actions[\s\S]*width: 44px[\s\S]*height: 44px/,
+      )
+      assert.match(
+        uiCss,
+        /\.shopping-reminder__item-actions[\s\S]*\.ui-button:nth-child\(2\)[\s\S]*display: inline-flex/,
+      )
+    },
+  )
+
+  await check(
+    'Release blocker: tutorial preference persists and the final CTA stays inside safe-area',
+    () => {
+      const appSource = readFileSync(
+        'src/App.tsx',
+        'utf8',
+      )
+      const uiCss = readFileSync(
+        'src/components/ui/ui.css',
+        'utf8',
+      )
+
+      assert.match(
+        appSource,
+        /isReplay[\s\S]*doNotShowAgain[\s\S]*shouldNotShowAgain/,
+      )
+      assert.match(
+        uiCss,
+        /\.first-run-tutorial \{[\s\S]*grid-template-rows: auto minmax\(0, 1fr\) auto[\s\S]*100dvh/,
+      )
+      assert.match(
+        uiCss,
+        /\.first-run-tutorial \.ui-dialog__footer[\s\S]*safe-area-inset-bottom/,
+      )
+      assert.match(
+        uiCss,
+        /\.first-run-tutorial__actions \.ui-button[\s\S]*min-height: 48px[\s\S]*white-space: nowrap/,
+      )
+    },
+  )
+
+  await check(
+    'Release blocker: standalone PWA uses one exit guard while browser mode keeps normal history',
+    () => {
+      const topLevel = createNavigationState({
+        page: 'shopping',
+      })
+      const detail = createNavigationState({
+        page: 'recipes',
+        recipeId: 'kimchi-stew',
+        index: 1,
+      })
+      const guard =
+        createPwaExitGuardState(topLevel)
+
+      assert.equal(
+        isTopLevelNavigationState(topLevel),
+        true,
+      )
+      assert.equal(
+        isTopLevelNavigationState(detail),
+        false,
+      )
+      assert.equal(isPwaExitGuardState(guard), true)
+      assert.equal(
+        isPwaExitGuardState(topLevel),
+        false,
+      )
+      assert.equal(
+        shouldUsePwaBackExit(true, false),
+        true,
+      )
+      assert.equal(
+        shouldUsePwaBackExit(false, false),
+        false,
+      )
+
+      const appSource = readFileSync(
+        'src/App.tsx',
+        'utf8',
+      )
+
+      assert.match(
+        appSource,
+        /한 번 더 누르면 오늘식탁을 종료해요/,
+      )
+      assert.match(
+        appSource,
+        /PWA_BACK_EXIT_TIMEOUT_MS = 2_000/,
+      )
+      assert.doesNotMatch(
+        appSource,
+        /window\.close\(/,
       )
     },
   )

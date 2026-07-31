@@ -13,6 +13,13 @@ export type ShoppingPurchaseMode =
 export type ShoppingReminderStatus =
   | 'none'
   | 'pending'
+  | 'restored'
+
+export type ShoppingSourceKind =
+  | 'manual'
+  | 'meal_plan'
+  | 'recipe'
+  | 'reminder_restored'
 
 export type ShoppingItem = {
   id: string
@@ -22,6 +29,12 @@ export type ShoppingItem = {
   completed: boolean
   source: ShoppingItemSource
   sourceId?: string
+  sourceKind?: ShoppingSourceKind
+  sourceRecipeId?: string
+  sourceRecipeName?: string
+  sourceMealDate?: string
+  sourceMealTime?: string
+  batchId?: string
   createdAt: string
   updatedAt: string
   purchaseStatus?: ShoppingPurchaseStatus

@@ -43,6 +43,9 @@ export type ShoppingDisplayItem = {
   quantities: ShoppingDisplayQuantity[]
   sourceTypes: ShoppingItemSource[]
   sourceIds: string[]
+  sourceRecipeNames: string[]
+  sourceMealDates: string[]
+  batchIds: string[]
   purchaseStatus: ShoppingPurchaseStatus
   purchaseMode: ShoppingPurchaseMode
   requiredQuantity: number
@@ -234,6 +237,7 @@ export function groupShoppingItemsByCategory(
         category,
         item.purchaseStatus,
         normalizedName,
+        item.unit?.trim().toLowerCase() ?? '',
       ].join(':')
       const existingItem = mergedItems.get(itemKey)
 
@@ -246,6 +250,16 @@ export function groupShoppingItemsByCategory(
           sourceTypes: [item.source],
           sourceIds: item.sourceId
             ? [item.sourceId]
+            : [],
+          sourceRecipeNames:
+            item.sourceRecipeName
+              ? [item.sourceRecipeName]
+              : [],
+          sourceMealDates: item.sourceMealDate
+            ? [item.sourceMealDate]
+            : [],
+          batchIds: item.batchId
+            ? [item.batchId]
             : [],
           purchaseStatus:
             item.purchaseStatus ?? 'planned',
@@ -280,6 +294,35 @@ export function groupShoppingItemsByCategory(
         !existingItem.sourceIds.includes(item.sourceId)
       ) {
         existingItem.sourceIds.push(item.sourceId)
+      }
+
+      if (
+        item.sourceRecipeName &&
+        !existingItem.sourceRecipeNames.includes(
+          item.sourceRecipeName,
+        )
+      ) {
+        existingItem.sourceRecipeNames.push(
+          item.sourceRecipeName,
+        )
+      }
+
+      if (
+        item.sourceMealDate &&
+        !existingItem.sourceMealDates.includes(
+          item.sourceMealDate,
+        )
+      ) {
+        existingItem.sourceMealDates.push(
+          item.sourceMealDate,
+        )
+      }
+
+      if (
+        item.batchId &&
+        !existingItem.batchIds.includes(item.batchId)
+      ) {
+        existingItem.batchIds.push(item.batchId)
       }
 
       if (item.quantity === undefined) {
@@ -323,6 +366,13 @@ export function groupShoppingItemsByCategory(
           itemIds: [...item.itemIds],
           sourceTypes: [...item.sourceTypes],
           sourceIds: [...item.sourceIds],
+          sourceRecipeNames: [
+            ...item.sourceRecipeNames,
+          ],
+          sourceMealDates: [
+            ...item.sourceMealDates,
+          ],
+          batchIds: [...item.batchIds],
           quantities: item.quantities.map(
             (quantity) => ({ ...quantity }),
           ),

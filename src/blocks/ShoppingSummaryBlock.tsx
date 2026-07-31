@@ -18,14 +18,14 @@ function ShoppingSummaryBlock({
   return (
     <Section
       title="장보기 목록"
-      description="필요한 품목을 확인하세요."
+      description="필요한 재료를 확인하세요."
     >
       <Card>
         {itemCount === 0 ? (
           <EmptyState
             icon={<ShoppingCart />}
             title="장보기 목록이 비어 있어요."
-            description="필요한 품목을 추가해 보세요."
+            description="필요한 재료를 추가해 보세요."
             action={
               <Button
                 variant="secondary"
@@ -44,7 +44,7 @@ function ShoppingSummaryBlock({
 
             <div className="shopping-summary__content">
               <p className="shopping-summary__label">
-                구매할 품목
+                구매할 재료
               </p>
 
               <h3 className="shopping-summary__title">

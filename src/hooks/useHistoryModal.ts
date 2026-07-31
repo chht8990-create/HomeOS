@@ -1,6 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 
 const HISTORY_MODAL_KEY = '__todayTableModal'
+export const HISTORY_MODAL_CHANGE_EVENT =
+  'today-table:history-modal-change'
+const activeHistoryModals = new Set<string>()
+
+export function hasActiveHistoryModal() {
+  return activeHistoryModals.size > 0
+}
+
+function publishHistoryModalChange() {
+  window.dispatchEvent(
+    new Event(HISTORY_MODAL_CHANGE_EVENT),
+  )
+}
 
 export function isTemporaryModalHistoryState(
   state: unknown,
@@ -44,6 +57,8 @@ function useHistoryModal<T>(modalName: string) {
           modalName,
         )
       ) {
+        activeHistoryModals.delete(modalName)
+        publishHistoryModalChange()
         valueRef.current = null
         setValue(null)
       }
@@ -52,6 +67,7 @@ function useHistoryModal<T>(modalName: string) {
     window.addEventListener('popstate', handlePopState)
 
     return () => {
+      activeHistoryModals.delete(modalName)
       window.removeEventListener(
         'popstate',
         handlePopState,
@@ -60,6 +76,8 @@ function useHistoryModal<T>(modalName: string) {
   }, [modalName])
 
   function openModal(nextValue: T) {
+    activeHistoryModals.add(modalName)
+    publishHistoryModalChange()
     valueRef.current = nextValue
     setValue(nextValue)
 
@@ -94,6 +112,8 @@ function useHistoryModal<T>(modalName: string) {
     }
 
     valueRef.current = null
+    activeHistoryModals.delete(modalName)
+    publishHistoryModalChange()
     setValue(null)
   }
 
@@ -114,6 +134,8 @@ function useHistoryModal<T>(modalName: string) {
     }
 
     valueRef.current = null
+    activeHistoryModals.delete(modalName)
+    publishHistoryModalChange()
     setValue(null)
     onClosed()
   }

@@ -16,6 +16,8 @@
   },
   "include": [
     "./**/*.ts",
+    "../src/services/feedbackEngine.ts",
+    "../src/types/feedback.ts",
     "../src/services/aiRecipeRecommendationEngine.ts",
     "../src/types/aiRecipeRecommendation.ts"
   ]

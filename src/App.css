@@ -95,7 +95,11 @@ button {
   padding:
     var(--space-lg)
     max(var(--space-md), env(safe-area-inset-right))
-    calc(112px + env(safe-area-inset-bottom))
+    calc(
+      var(--bottom-nav-height) +
+        env(safe-area-inset-bottom, 0px) +
+        var(--space-6)
+    )
     max(var(--space-md), env(safe-area-inset-left));
   background: var(--color-background);
   color: var(--color-text);
@@ -435,6 +439,48 @@ button {
   margin-top: var(--space-4);
 }
 
+.meal-plan-save-feedback {
+  margin: 0 0 var(--space-6);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-input);
+  background: var(--color-success-subtle);
+  color: var(--color-success);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.55;
+  word-break: keep-all;
+}
+
+.meal-plan-schedule {
+  margin-top: var(--space-8);
+}
+
+.meal-plan-schedule .ui-section-header {
+  margin-bottom: var(--space-4);
+}
+
+.meal-plan-schedule .ui-section-description {
+  margin-top: var(--space-2);
+}
+
+.inventory-item--highlighted {
+  border-radius: var(--radius-input);
+  background: var(--color-primary-subtle);
+  box-shadow: 0 0 0 4px var(--color-primary-subtle);
+  animation: meal-plan-highlight 2.8s ease both;
+}
+
+@keyframes meal-plan-highlight {
+  0%,
+  70% {
+    background: var(--color-primary-subtle);
+  }
+
+  100% {
+    background: transparent;
+  }
+}
+
 .meal-plan-shopping > p,
 .ai-trial-form__notice {
   color: var(--color-text-muted);
@@ -447,17 +493,107 @@ button {
 }
 
 .ai-trial-checkbox {
+  position: relative;
   display: flex;
   min-height: 44px;
   align-items: center;
   gap: var(--space-3);
   color: var(--color-text);
   font-weight: var(--font-weight-semibold);
+  cursor: pointer;
 }
 
-.ai-trial-checkbox input {
+.ai-trial-form
+  .ai-trial-checkbox
+  input[type='checkbox'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-width: 1px;
+  min-height: 1px;
+  max-width: 1px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  opacity: 0;
+  white-space: nowrap;
+}
+
+.ai-trial-checkbox__visual {
+  display: inline-flex;
   width: 22px;
   height: 22px;
+  flex: 0 0 22px;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--color-border-strong);
+  border-radius: 7px;
+  background: var(--color-surface);
+  color: var(--color-on-primary);
+  transition:
+    border-color var(--motion-duration-fast)
+      var(--motion-ease-standard),
+    background var(--motion-duration-fast)
+      var(--motion-ease-standard),
+    box-shadow var(--motion-duration-fast)
+      var(--motion-ease-standard);
+}
+
+.ai-trial-checkbox__visual svg {
+  opacity: 0;
+  transform: scale(0.72);
+  transition:
+    opacity var(--motion-duration-fast)
+      var(--motion-ease-standard),
+    transform var(--motion-duration-fast)
+      var(--motion-ease-standard);
+}
+
+.ai-trial-form
+  .ai-trial-checkbox
+  input[type='checkbox']:checked
+  + .ai-trial-checkbox__visual {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}
+
+.ai-trial-form
+  .ai-trial-checkbox
+  input[type='checkbox']:checked
+  + .ai-trial-checkbox__visual
+  svg {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.ai-trial-form
+  .ai-trial-checkbox
+  input[type='checkbox']:focus-visible
+  + .ai-trial-checkbox__visual {
+  outline: 3px solid
+    color-mix(
+      in srgb,
+      var(--color-primary) 28%,
+      transparent
+    );
+  outline-offset: 3px;
+}
+
+.ai-trial-checkbox:has(
+    input[type='checkbox']:disabled
+  ) {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.ai-trial-checkbox__label {
+  min-width: 0;
+  line-height: 1.45;
 }
 
 .ai-trial-form .meal-editor__actions {
@@ -502,22 +638,6 @@ button {
   color: var(--color-primary);
   font-size: var(--font-size-caption);
   font-weight: var(--font-weight-bold);
-}
-
-.ai-trial-failure-note {
-  margin: 0;
-  padding: var(--space-3);
-  border: 1px solid
-    color-mix(
-      in srgb,
-      var(--color-warning) 24%,
-      var(--color-border)
-    );
-  border-radius: var(--radius-input);
-  background: var(--color-warning-subtle);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-caption);
-  line-height: 1.55;
 }
 
 .ai-trial-failure-dialog {
@@ -583,6 +703,35 @@ button {
   padding: var(--space-3);
   border-radius: var(--radius-input);
   background: var(--color-surface-sunken);
+}
+
+.ai-trial-recipe-card__image {
+  display: block;
+  width: 100%;
+  height: clamp(148px, 35vw, 180px);
+  grid-column: 1 / -1;
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  object-fit: cover;
+  object-position: center;
+}
+
+.ai-trial-recipe-card__image--placeholder {
+  display: grid;
+  height: 80px;
+  place-content: center;
+  justify-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.ai-trial-recipe-card__image--placeholder small {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .ai-trial-recipe-card__heading {
@@ -670,6 +819,22 @@ button {
 
   .meal-plan-maintenance-actions {
     display: grid;
+  }
+}
+
+@media (forced-colors: active) {
+  .ai-trial-checkbox__visual {
+    border-color: CanvasText;
+    forced-color-adjust: none;
+  }
+
+  .ai-trial-form
+    .ai-trial-checkbox
+    input[type='checkbox']:checked
+    + .ai-trial-checkbox__visual {
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
   }
 }
 

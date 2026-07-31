@@ -8,7 +8,10 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
+  ChevronDown,
+  ChevronUp,
   Info,
+  Utensils,
 } from 'lucide-react'
 import type { PageName } from '../components/BottomNavigation'
 import RecipeSpaceSwitcher from '../components/RecipeSpaceSwitcher'
@@ -20,7 +23,7 @@ import IconButton from '../components/ui/IconButton'
 import PositiveIntegerInput from '../components/ui/PositiveIntegerInput'
 import StyledSelect from '../components/ui/StyledSelect'
 import Toast from '../components/ui/Toast'
-import { getRecipeImage } from '../data/recipeImages'
+import { resolveRecipeImage } from '../data/recipeImages'
 import useHistoryModal from '../hooks/useHistoryModal'
 import useInventory from '../hooks/useInventory'
 import useMealPlan from '../hooks/useMealPlan'
@@ -35,6 +38,7 @@ import {
   formatRecipeAmount,
   scaleRecipeAmount,
 } from '../services/recipeNormalizationEngine'
+import { createIngredientUnitPresentation } from '../services/ingredientUnitEngine'
 import {
   createMeasurementSuggestions,
   type MeasurementIngredient,
@@ -52,6 +56,7 @@ type RecipePageProps = {
   onChangePage: (page: PageName) => void
   onOpenRecipeDetail: (recipeId: string) => void
   onCloseRecipeDetail: () => void
+  showInventoryRecommendations?: boolean
 }
 
 type RecipePresentation = {
@@ -227,16 +232,10 @@ function getMissingIngredientMessage(
   missingIngredientNames: string[],
 ) {
   if (missingIngredientNames.length === 0) {
-    return '지금 냉장고 재료로 바로 만들 수 있어요.'
+    return '지금 만들 수 있어요.'
   }
 
-  const [firstIngredient] = missingIngredientNames
-
-  if (missingIngredientNames.length === 1) {
-    return `${firstIngredient}만 준비하면 만들 수 있어요.`
-  }
-
-  return `${firstIngredient} 외 ${missingIngredientNames.length - 1}가지를 준비하면 만들 수 있어요.`
+  return `추가 재료 ${missingIngredientNames.length}개가 필요해요.`
 }
 
 function isMissingIngredient(
@@ -285,43 +284,48 @@ function RecipePhoto({
   tone,
   size = 'card',
 }: RecipePhotoProps) {
-  const imageSource = getRecipeImage(recipeId)
+  const imageResolution = resolveRecipeImage(
+    recipeId,
+    recipeName,
+  )
+
+  if (!imageResolution) {
+    return (
+      <div
+        className={`recipe-photo recipe-photo--empty recipe-photo--${size}`}
+        data-image-match="placeholder"
+        role="img"
+        aria-label={`${recipeName} 대표 사진 없음`}
+      >
+        <Utensils
+          size={24}
+          aria-hidden="true"
+        />
+        <span className="recipe-photo__empty-label">
+          대표 사진이 아직 없어요.
+        </span>
+        <small className="recipe-photo__empty-help">
+          레시피는 정상적으로 이용할 수 있습니다.
+        </small>
+      </div>
+    )
+  }
 
   return (
     <div
-      className={`recipe-photo recipe-photo--${tone} recipe-photo--${size} ${
-        imageSource ? 'recipe-photo--image' : ''
-      }`}
+      className={`recipe-photo recipe-photo--${tone} recipe-photo--${size} recipe-photo--image`}
+      data-image-key={imageResolution.imageKey}
+      data-image-match={imageResolution.match}
     >
-      {imageSource ? (
-        <img
-          src={imageSource}
-          alt={`${recipeName} 음식 사진`}
-          loading={size === 'hero' ? 'eager' : 'lazy'}
-          decoding="async"
-          fetchPriority={
-            size === 'hero' ? 'high' : 'auto'
-          }
-        />
-      ) : (
-        <>
-          <span
-            className="recipe-photo__light"
-            aria-hidden="true"
-          />
-          <span
-            className="recipe-photo__plate"
-            aria-hidden="true"
-          />
-          <span
-            className="recipe-photo__garnish"
-            aria-hidden="true"
-          />
-          <span className="recipe-photo__label">
-            오늘의 집밥
-          </span>
-        </>
-      )}
+      <img
+        src={imageResolution.src}
+        alt={`${recipeName} 음식 사진`}
+        loading={size === 'hero' ? 'eager' : 'lazy'}
+        decoding="async"
+        fetchPriority={
+          size === 'hero' ? 'high' : 'auto'
+        }
+      />
     </div>
   )
 }
@@ -331,6 +335,7 @@ function RecipePage({
   onChangePage,
   onOpenRecipeDetail,
   onCloseRecipeDetail,
+  showInventoryRecommendations = false,
 }: RecipePageProps) {
   const pageRef = useRef<HTMLDivElement>(null)
   const { recipes } = useRecipes()
@@ -345,10 +350,19 @@ function RecipePage({
     useHistoryModal<MeasurementIngredient>(
       'recipe-measurement-helper',
     )
+  const recommendationResultRef =
+    useRef<HTMLElement>(null)
   const recommendations = useMemo(
     () => recommendRecipes(recipes, inventoryItems),
     [inventoryItems, recipes],
   )
+  const displayRecipes =
+    showInventoryRecommendations
+      ? recommendations.map(
+          (recommendation) =>
+            recommendation.recipe,
+        )
+      : recipes
   const recommendationByRecipeId = useMemo(
     () =>
       new Map(
@@ -370,6 +384,36 @@ function RecipePage({
   const [planError, setPlanError] = useState('')
   const [planFeedback, setPlanFeedback] =
     useState<RecipePlanFeedback | null>(null)
+  const [
+    ingredientDisclosure,
+    setIngredientDisclosure,
+  ] = useState({
+    recipeId: selectedRecipeId,
+    expanded: true,
+  })
+  const [tipsDisclosure, setTipsDisclosure] =
+    useState({
+      recipeId: selectedRecipeId,
+      expanded: false,
+    })
+  const [stepsDisclosure, setStepsDisclosure] =
+    useState({
+      recipeId: selectedRecipeId,
+      expanded: true,
+    })
+  const ingredientsExpanded =
+    ingredientDisclosure.recipeId ===
+    selectedRecipeId
+      ? ingredientDisclosure.expanded
+      : true
+  const tipsExpanded =
+    tipsDisclosure.recipeId === selectedRecipeId
+      ? tipsDisclosure.expanded
+      : false
+  const stepsExpanded =
+    stepsDisclosure.recipeId === selectedRecipeId
+      ? stepsDisclosure.expanded
+      : true
   const selectedRecipe = recipes.find(
     (recipe) => recipe.id === selectedRecipeId,
   )
@@ -414,6 +458,25 @@ function RecipePage({
       )
     }
   }, [selectedRecipeId])
+
+  useEffect(() => {
+    if (
+      selectedRecipeId ||
+      !showInventoryRecommendations
+    ) {
+      return
+    }
+
+    window.requestAnimationFrame(() => {
+      recommendationResultRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      })
+    })
+  }, [
+    selectedRecipeId,
+    showInventoryRecommendations,
+  ])
 
   function handleSaveRecipePlan() {
     if (
@@ -669,7 +732,18 @@ function RecipePage({
               className="recipe-detail-section"
               aria-labelledby="recipe-ingredients-title"
             >
-              <div className="recipe-detail-section__heading">
+              <button
+                type="button"
+                className="recipe-detail-section__heading recipe-detail-section__heading--toggle"
+                aria-expanded={ingredientsExpanded}
+                aria-controls="recipe-ingredients-content"
+                onClick={() =>
+                  setIngredientDisclosure({
+                    recipeId: selectedRecipeId,
+                    expanded: !ingredientsExpanded,
+                  })
+                }
+              >
                 <div>
                   <p className="recipe-kicker">
                     냉장고 재료 기준
@@ -678,19 +752,41 @@ function RecipePage({
                     필요한 재료
                   </h2>
                 </div>
-                <Badge
-                  tone={
-                    selectedMissingIngredients.length > 0
-                      ? 'warning'
-                      : 'success'
-                  }
-                >
-                  {selectedMissingIngredients.length > 0
-                    ? `부족 ${selectedMissingIngredients.length}가지`
-                    : '모두 있음'}
-                </Badge>
-              </div>
+                <span className="recipe-detail-section__heading-actions">
+                  <Badge
+                    tone={
+                      selectedMissingIngredients.length > 0
+                        ? 'warning'
+                        : 'success'
+                    }
+                  >
+                    {selectedMissingIngredients.length > 0
+                      ? `부족 ${selectedMissingIngredients.length}가지`
+                      : '모두 있음'}
+                  </Badge>
+                  <span className="recipe-detail-section__toggle-label">
+                    {ingredientsExpanded
+                      ? '접기'
+                      : '재료 보기'}
+                    {ingredientsExpanded ? (
+                      <ChevronUp
+                        size={18}
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <ChevronDown
+                        size={18}
+                        aria-hidden="true"
+                      />
+                    )}
+                  </span>
+                </span>
+              </button>
 
+              <div
+                id="recipe-ingredients-content"
+                hidden={!ingredientsExpanded}
+              >
               {ingredientGroups ? (
                 <div className="recipe-ingredient-groups">
                   {ingredientGroupLabels.map(
@@ -731,6 +827,14 @@ function RecipePage({
                                     baseServings,
                                     targetServings,
                                   )
+                                const presentation =
+                                  createIngredientUnitPresentation(
+                                    {
+                                      name: ingredient.name,
+                                      quantity: scaledAmount,
+                                      unit: ingredient.unit,
+                                    },
+                                  )
 
                                 return (
                                   <li
@@ -745,7 +849,7 @@ function RecipePage({
                                   >
                                     <span className="recipe-ingredient-list__name">
                                       <strong>
-                                        {ingredient.name}
+                                        {presentation.displayName}
                                       </strong>
                                       <RecipeIngredientStatusBadge
                                         status={
@@ -756,31 +860,36 @@ function RecipePage({
                                               : 'owned'
                                         }
                                       />
-                                      {ingredient.note ? (
+                                      {ingredient.note ||
+                                      presentation.preparationText ? (
                                         <small>
-                                          {ingredient.note}
+                                          {[
+                                            ingredient.note,
+                                            presentation.preparationText,
+                                          ]
+                                            .filter(Boolean)
+                                            .join(' · ')}
                                         </small>
                                       ) : null}
                                     </span>
                                     <span className="recipe-ingredient-list__measurement">
                                       <span className="ui-number">
-                                        {formatRecipeAmount(
-                                          scaledAmount,
-                                          ingredient.unit,
-                                        )}
-                                        {ingredient.unit}
+                                        {presentation.displayText}
                                       </span>
                                       <IconButton
                                         variant="ghost"
                                         className="recipe-measurement-button"
-                                        aria-label={`${ingredient.name} 계량 방법 보기`}
+                                        aria-label={`${presentation.displayName} 계량 방법 보기`}
                                         onClick={() =>
                                           measurementModal.openModal(
                                             {
-                                              name: ingredient.name,
+                                              name: presentation.displayName,
                                               amount:
-                                                scaledAmount,
-                                              unit: ingredient.unit,
+                                                presentation.displayAmount,
+                                              unit:
+                                                presentation.displayUnit,
+                                              displayText:
+                                                presentation.displayText,
                                             },
                                           )
                                         }
@@ -811,6 +920,20 @@ function RecipePage({
                           ingredient,
                           selectedMissingIngredients,
                         )
+                      const scaledAmount =
+                        scaleRecipeAmount(
+                          ingredient.quantity,
+                          baseServings,
+                          targetServings,
+                        )
+                      const presentation =
+                        createIngredientUnitPresentation(
+                          {
+                            name: ingredient.name,
+                            quantity: scaledAmount,
+                            unit: ingredient.unit,
+                          },
+                        )
 
                       return (
                         <li
@@ -823,7 +946,7 @@ function RecipePage({
                         >
                           <span className="recipe-ingredient-list__name">
                             <strong>
-                              {ingredient.name}
+                              {presentation.displayName}
                             </strong>
                             <RecipeIngredientStatusBadge
                               status={
@@ -835,31 +958,22 @@ function RecipePage({
                           </span>
                           <span className="recipe-ingredient-list__measurement">
                             <span className="ui-number">
-                              {formatRecipeAmount(
-                                scaleRecipeAmount(
-                                  ingredient.quantity,
-                                  baseServings,
-                                  targetServings,
-                                ),
-                                ingredient.unit,
-                              )}
-                              {ingredient.unit}
+                              {presentation.displayText}
                             </span>
                             <IconButton
                               variant="ghost"
                               className="recipe-measurement-button"
-                              aria-label={`${ingredient.name} 계량 방법 보기`}
+                              aria-label={`${presentation.displayName} 계량 방법 보기`}
                               onClick={() =>
                                 measurementModal.openModal(
                                   {
-                                    name: ingredient.name,
+                                    name: presentation.displayName,
                                     amount:
-                                      scaleRecipeAmount(
-                                        ingredient.quantity,
-                                        baseServings,
-                                        targetServings,
-                                      ),
-                                    unit: ingredient.unit,
+                                      presentation.displayAmount,
+                                    unit:
+                                      presentation.displayUnit,
+                                    displayText:
+                                      presentation.displayText,
                                   },
                                 )
                               }
@@ -900,13 +1014,25 @@ function RecipePage({
                   </ul>
                 </div>
               ) : null}
+              </div>
             </section>
 
             <section
               className="recipe-detail-section recipe-detail-section--guide"
               aria-labelledby="recipe-steps-title"
             >
-              <div className="recipe-detail-section__heading">
+              <button
+                type="button"
+                className="recipe-detail-section__heading recipe-detail-section__heading--toggle"
+                aria-expanded={stepsExpanded}
+                aria-controls="recipe-steps-content"
+                onClick={() =>
+                  setStepsDisclosure({
+                    recipeId: selectedRecipeId,
+                    expanded: !stepsExpanded,
+                  })
+                }
+              >
                 <div>
                   <p className="recipe-kicker">
                     메뉴별 상세 안내
@@ -917,62 +1043,83 @@ function RecipePage({
                       : '조리 순서가 없어요'}
                   </h2>
                 </div>
-              </div>
+                <span className="recipe-detail-section__toggle-label">
+                  {stepsExpanded
+                    ? '접기'
+                    : '조리 순서 보기'}
+                  {stepsExpanded ? (
+                    <ChevronUp
+                      size={18}
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <ChevronDown
+                      size={18}
+                      aria-hidden="true"
+                    />
+                  )}
+                </span>
+              </button>
 
-              <p className="recipe-guide-note">
-                {selectedRecipe.steps?.length
-                  ? '단계별 불 세기와 완성 상태를 함께 확인해 주세요. 재료 상태에 따라 시간은 조금 달라질 수 있어요.'
-                  : '가져온 레시피에 상세 조리 순서가 없어 실제 조리법으로 표시하지 않아요.'}
-              </p>
+              <div
+                id="recipe-steps-content"
+                hidden={!stepsExpanded}
+              >
+                <p className="recipe-guide-note">
+                  {selectedRecipe.steps?.length
+                    ? '단계별 불 세기와 완성 상태를 함께 확인해 주세요. 재료 상태에 따라 시간은 조금 달라질 수 있어요.'
+                    : '가져온 레시피에 상세 조리 순서가 없어 실제 조리법으로 표시하지 않아요.'}
+                </p>
 
-              {selectedRecipe.steps?.length ? (
-                <ol className="recipe-step-list">
-                  {selectedRecipe.steps.map((step) => (
-                    <li key={step.order}>
-                      <span>
-                        {String(step.order).padStart(
-                          2,
-                          '0',
-                        )}
-                      </span>
-                      <div>
-                        <strong className="recipe-step-list__title">
-                          {step.title ??
-                            `${step.order}단계`}
-                        </strong>
-                        <span className="recipe-step-list__meta">
-                          {step.durationMinutes ??
-                            step.minutes}
-                          분
-                          {' · '}
-                          {step.heatLevel ??
-                            step.heat ??
-                            '불 사용 안 함'}
+                {selectedRecipe.steps?.length ? (
+                  <ol className="recipe-step-list">
+                    {selectedRecipe.steps.map((step) => (
+                      <li key={step.order}>
+                        <span>
+                          {String(step.order).padStart(
+                            2,
+                            '0',
+                          )}
                         </span>
-                        <p>{step.instruction}</p>
-                        {step.completionCue ??
-                        step.doneness ? (
-                          <small>
-                            완성 기준:{' '}
-                            {step.completionCue ??
-                              step.doneness}
-                          </small>
-                        ) : null}
-                        {step.reason ? (
-                          <small className="recipe-step-list__reason">
-                            이렇게 하는 이유: {step.reason}
-                          </small>
-                        ) : null}
-                        {step.warning ? (
-                          <small className="recipe-step-list__warning">
-                            주의: {step.warning}
-                          </small>
-                        ) : null}
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              ) : null}
+                        <div>
+                          <strong className="recipe-step-list__title">
+                            {step.title ??
+                              `${step.order}단계`}
+                          </strong>
+                          <span className="recipe-step-list__meta">
+                            {step.durationMinutes ??
+                              step.minutes}
+                            분
+                            {' · '}
+                            {step.heatLevel ??
+                              step.heat ??
+                              '불 사용 안 함'}
+                          </span>
+                          <p>{step.instruction}</p>
+                          {step.completionCue ??
+                          step.doneness ? (
+                            <small>
+                              완성 기준:{' '}
+                              {step.completionCue ??
+                                step.doneness}
+                            </small>
+                          ) : null}
+                          {step.reason ? (
+                            <small className="recipe-step-list__reason">
+                              이렇게 하는 이유: {step.reason}
+                            </small>
+                          ) : null}
+                          {step.warning ? (
+                            <small className="recipe-step-list__warning">
+                              주의: {step.warning}
+                            </small>
+                          ) : null}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                ) : null}
+              </div>
             </section>
           </div>
 
@@ -985,7 +1132,18 @@ function RecipePage({
               className="recipe-detail-section recipe-detail-section--tips"
               aria-labelledby="recipe-tips-title"
             >
-              <div className="recipe-detail-section__heading">
+              <button
+                type="button"
+                className="recipe-detail-section__heading recipe-detail-section__heading--toggle"
+                aria-expanded={tipsExpanded}
+                aria-controls="recipe-tips-content"
+                onClick={() =>
+                  setTipsDisclosure({
+                    recipeId: selectedRecipeId,
+                    expanded: !tipsExpanded,
+                  })
+                }
+              >
                 <div>
                   <p className="recipe-kicker">
                     끝까지 맛있게
@@ -994,9 +1152,27 @@ function RecipePage({
                     간 조절·보관 팁
                   </h2>
                 </div>
-              </div>
+                <span className="recipe-detail-section__toggle-label">
+                  {tipsExpanded ? '접기' : '팁 보기'}
+                  {tipsExpanded ? (
+                    <ChevronUp
+                      size={18}
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <ChevronDown
+                      size={18}
+                      aria-hidden="true"
+                    />
+                  )}
+                </span>
+              </button>
 
-              <div className="recipe-tips-grid">
+              <div
+                id="recipe-tips-content"
+                className="recipe-tips-grid"
+                hidden={!tipsExpanded}
+              >
                 {selectedRecipe.seasoningAdjustment
                   ?.length ? (
                   <div>
@@ -1162,10 +1338,10 @@ function RecipePage({
           }
           description={
             measurementModal.value
-              ? `${formatRecipeAmount(
+              ? `${measurementModal.value.displayText ?? `${formatRecipeAmount(
                   measurementModal.value.amount,
                   measurementModal.value.unit,
-                )}${measurementModal.value.unit}를 집에 있는 도구로 재는 방법이에요.`
+                )}${measurementModal.value.unit}`}를 선택한 도구로 재는 방법이에요.`
               : undefined
           }
           onClose={measurementModal.closeModal}
@@ -1260,8 +1436,8 @@ function RecipePage({
     )
   }
 
-  const featuredRecipe = recipes[0]
-  const remainingRecipes = recipes.slice(1)
+  const featuredRecipe = displayRecipes[0]
+  const remainingRecipes = displayRecipes.slice(1)
   const featuredRecommendation = featuredRecipe
     ? recommendationByRecipeId.get(featuredRecipe.id)
     : undefined
@@ -1315,6 +1491,29 @@ function RecipePage({
           }
           onOpenRecipes={() => undefined}
         />
+
+        {showInventoryRecommendations ? (
+          <section
+            ref={recommendationResultRef}
+            className="recipe-inventory-result"
+            aria-live="polite"
+          >
+            <Badge tone="primary">
+              냉장고 재료 반영
+            </Badge>
+            <h2>저장된 레시피 비교 결과</h2>
+            <p>
+              {inventoryItems.length === 0
+                ? '재료를 조금 더 등록하면 추천 정확도가 높아져요. 저장된 레시피 전체를 보여드릴게요.'
+                : recommendations.some(
+                      (recommendation) =>
+                        recommendation.isInventorySufficient,
+                    )
+                  ? '현재 냉장고 수량과 단위를 반영해 만들기 좋은 순서로 정렬했어요.'
+                  : '지금 바로 만들 수 있는 메뉴는 없지만, 추가 재료가 적은 순으로 보여드릴게요.'}
+            </p>
+          </section>
+        ) : null}
 
         {featuredRecipe ? (
           <section

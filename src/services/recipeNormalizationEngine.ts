@@ -238,42 +238,19 @@ const countUnits = new Set([
   '쪽',
   '장',
   '봉',
+  '봉지',
   '팩',
+  '캔',
+  '공기',
   '마리',
 ])
 
-const practicalCountFractions = [
-  { value: 0, label: '' },
-  { value: 0.25, label: '1/4' },
-  { value: 1 / 3, label: '1/3' },
-  { value: 0.5, label: '1/2' },
-  { value: 2 / 3, label: '2/3' },
-  { value: 0.75, label: '3/4' },
-  { value: 1, label: '' },
-]
-
 function formatCountAmount(amount: number) {
-  const integerPart = Math.floor(amount)
-  const decimalPart = amount - integerPart
-  const fraction = practicalCountFractions.reduce(
-    (closest, candidate) =>
-      Math.abs(candidate.value - decimalPart) <
-      Math.abs(closest.value - decimalPart)
-        ? candidate
-        : closest,
-  )
-
-  if (fraction.value === 1) {
-    return String(integerPart + 1)
+  if (amount > 0 && amount < 0.75) {
+    return '1/2'
   }
 
-  if (!fraction.label) {
-    return String(integerPart)
-  }
-
-  return integerPart === 0
-    ? fraction.label
-    : `${integerPart} ${fraction.label}`
+  return String(Math.max(1, Math.round(amount)))
 }
 
 export function formatRecipeAmount(
@@ -281,6 +258,13 @@ export function formatRecipeAmount(
   unit?: string,
 ) {
   const normalizedUnit = unit?.trim().toLowerCase()
+
+  if (
+    normalizedUnit === '약간' ||
+    normalizedUnit === '한 꼬집'
+  ) {
+    return ''
+  }
 
   if (normalizedUnit === 'g') {
     return amount > 0 && amount < 1

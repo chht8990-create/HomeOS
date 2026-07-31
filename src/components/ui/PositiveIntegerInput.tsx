@@ -1,5 +1,12 @@
-import type { ComponentProps } from 'react'
-import { normalizePositiveIntegerInput } from '../../services/integerInputEngine'
+import {
+  useState,
+  type ComponentProps,
+  type FocusEvent,
+} from 'react'
+import {
+  normalizePositiveIntegerDraft,
+  normalizePositiveIntegerInput,
+} from '../../services/integerInputEngine'
 import Input from './Input'
 
 type PositiveIntegerInputProps = Omit<
@@ -19,30 +26,68 @@ function PositiveIntegerInput({
   defaultValue,
   min = 1,
   max,
+  onFocus,
+  onBlur,
   ...inputProps
 }: PositiveIntegerInputProps) {
+  const [draftValue, setDraftValue] =
+    useState<string | null>(null)
+  const normalizationOptions = {
+    defaultValue,
+    min,
+    ...(max === undefined ? {} : { max }),
+  }
+
+  function handleFocus(
+    event: FocusEvent<HTMLInputElement>,
+  ) {
+    const input = event.currentTarget
+
+    setDraftValue(String(value))
+    input.select()
+    window.requestAnimationFrame(() => {
+      if (document.activeElement === input) {
+        input.select()
+      }
+    })
+    onFocus?.(event)
+  }
+
+  function handleBlur(
+    event: FocusEvent<HTMLInputElement>,
+  ) {
+    const committedValue =
+      normalizePositiveIntegerInput(
+        draftValue ?? value,
+        normalizationOptions,
+      )
+
+    setDraftValue(null)
+    onValueChange(committedValue)
+    onBlur?.(event)
+  }
+
   return (
     <Input
       {...inputProps}
-      type="number"
+      type="text"
       inputMode="numeric"
-      step={1}
-      min={min}
-      max={max}
-      value={String(value)}
+      pattern="[0-9]*"
+      value={draftValue ?? String(value)}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
       onChange={(event) => {
-        const normalizedValue =
-          normalizePositiveIntegerInput(
+        const nextDraftValue =
+          normalizePositiveIntegerDraft(
             event.currentTarget.value,
-            {
-              defaultValue,
-              min,
-              ...(max === undefined ? {} : { max }),
-            },
+            normalizationOptions,
           )
 
-        event.currentTarget.value = String(normalizedValue)
-        onValueChange(normalizedValue)
+        setDraftValue(nextDraftValue)
+
+        if (nextDraftValue !== '') {
+          onValueChange(Number(nextDraftValue))
+        }
       }}
     />
   )

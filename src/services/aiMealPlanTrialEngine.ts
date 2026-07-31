@@ -1,5 +1,7 @@
 import { addDaysToDateKey } from './defaultMealPlanEngine.js'
 import { createMealPlanShoppingIngredients } from './mealPlanShoppingEngine.js'
+import { normalizeAiMenuName } from './aiMenuNameEngine.js'
+import { normalizeAiIngredientUnit } from './ingredientUnitEngine.js'
 import type { Ingredient } from '../types/ingredient'
 import type {
   AiMealPlanDraftDay,
@@ -26,6 +28,7 @@ export const AI_MEAL_PLAN_TRIAL_CHANGE_EVENT =
   'today-table:ai-meal-plan-trial-changed'
 export const AI_MEAL_PLAN_TRIAL_DAY_COUNT = 7
 export const AI_MEAL_PLAN_MAX_INVENTORY_ITEMS = 40
+export const AI_MEAL_PLAN_MAX_RECENT_MENUS = 14
 
 type ValidationSuccess = {
   ok: true
@@ -148,6 +151,19 @@ export function validateAiMealPlanTrialRequest(
   }
 
   const request = value as Record<string, unknown>
+  const traceId = readOptionalText(
+    request.traceId,
+    80,
+  )
+  const recentMenuNames = Array.isArray(
+    request.recentMenuNames,
+  )
+    ? request.recentMenuNames.flatMap((name) => {
+        const parsedName = readText(name, 40)
+
+        return parsedName ? [parsedName] : []
+      })
+    : []
   const inventoryItems = Array.isArray(
     request.inventoryItems,
   )
@@ -184,8 +200,17 @@ export function validateAiMealPlanTrialRequest(
     !Number.isInteger(request.weekdayMaxMinutes) ||
     request.weekdayMaxMinutes < 15 ||
     request.weekdayMaxMinutes > 90 ||
+    (request.recentMenuNames !== undefined &&
+      (!Array.isArray(request.recentMenuNames) ||
+        recentMenuNames.length !==
+          request.recentMenuNames.length ||
+        recentMenuNames.length >
+          AI_MEAL_PLAN_MAX_RECENT_MENUS)) ||
     inventoryItems.length >
-      AI_MEAL_PLAN_MAX_INVENTORY_ITEMS
+      AI_MEAL_PLAN_MAX_INVENTORY_ITEMS ||
+    (request.traceId !== undefined &&
+      (!traceId ||
+        !/^[A-Za-z0-9:_-]+$/.test(traceId)))
   ) {
     return {
       ok: false,
@@ -197,6 +222,7 @@ export function validateAiMealPlanTrialRequest(
   return {
     ok: true,
     data: {
+      ...(traceId ? { traceId } : {}),
       startDate: request.startDate,
       householdSize: request.householdSize,
       includesChildren: request.includesChildren,
@@ -235,8 +261,56 @@ export function validateAiMealPlanTrialRequest(
         : {}),
       weekdayMaxMinutes: request.weekdayMaxMinutes,
       inventoryItems,
+      ...(recentMenuNames.length > 0
+        ? {
+            recentMenuNames: [
+              ...new Set(recentMenuNames),
+            ].slice(
+              0,
+              AI_MEAL_PLAN_MAX_RECENT_MENUS,
+            ),
+          }
+        : {}),
     },
   }
+}
+
+export function getRecentMealPlanMenuNames(
+  mealPlans: PlannedMeal[],
+  referenceDate: string,
+  dayCount = 14,
+) {
+  if (!isDateKey(referenceDate)) {
+    return []
+  }
+
+  const safeDayCount = Math.max(
+    1,
+    Math.min(
+      AI_MEAL_PLAN_MAX_RECENT_MENUS,
+      Math.floor(dayCount),
+    ),
+  )
+  const rangeStart = addDaysToDateKey(
+    referenceDate,
+    -safeDayCount,
+  )
+
+  return [
+    ...new Set(
+      mealPlans
+        .filter(
+          (mealPlan) =>
+            mealPlan.date >= rangeStart &&
+            mealPlan.date < referenceDate,
+        )
+        .sort((first, second) =>
+          second.date.localeCompare(first.date),
+        )
+        .map((mealPlan) => mealPlan.name.trim())
+        .filter(Boolean),
+    ),
+  ].slice(0, AI_MEAL_PLAN_MAX_RECENT_MENUS)
 }
 
 function readIngredient(value: unknown) {
@@ -254,7 +328,11 @@ function readIngredient(value: unknown) {
     typeof quantity === 'number' &&
     Number.isFinite(quantity) &&
     quantity > 0
-    ? { name, quantity, unit }
+    ? normalizeAiIngredientUnit({
+        name,
+        quantity,
+        unit,
+      })
     : null
 }
 
@@ -1015,6 +1093,7 @@ export function parseAiMealPlanTrialOutput(
 function readDraftDay(
   value: unknown,
   startDate: string,
+  allowLegacyName = false,
 ): AiMealPlanDraftDay | null {
   if (!value || typeof value !== 'object') {
     return null
@@ -1022,7 +1101,10 @@ function readDraftDay(
 
   const day = value as Record<string, unknown>
   const dayIndex = day.day
-  const name = readText(day.name, 80)
+  const legacyName = readText(day.name, 80)
+  const name = allowLegacyName
+    ? legacyName
+    : normalizeAiMenuName(day.name)
   const summary = readText(day.summary, 240)
   const recommendationReason = readText(
     day.recommendationReason,
@@ -1094,13 +1176,108 @@ function readDraftDay(
   }
 }
 
-export function parseAiMealPlanDraftOutput(
+export type AiMealPlanDraftParseFailureReason =
+  | 'OUTPUT_INVALID'
+  | 'DAY_COUNT_INVALID'
+  | 'DAY_INVALID'
+  | 'MENU_NAME_INVALID'
+  | 'DUPLICATE_DAY'
+  | 'DUPLICATE_MENU'
+  | 'RECENT_MENU_DUPLICATE'
+  | 'DIVERSITY_VIOLATION'
+  | 'RESTRICTION_VIOLATION'
+
+export type AiMealCookingType =
+  | 'soup-stew'
+  | 'stir-fry'
+  | 'grill'
+  | 'braise'
+  | 'rice-noodle'
+  | 'steam'
+  | 'pan-fry'
+  | 'salad'
+  | 'other'
+
+function normalizeMenuComparisonName(
+  menuName: string,
+) {
+  return (
+    normalizeAiMenuName(menuName) ?? menuName
+  )
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '')
+}
+
+export function classifyAiMealCookingType(
+  menuName: string,
+): AiMealCookingType {
+  const normalizedName = menuName
+    .trim()
+    .toLowerCase()
+
+  if (
+    /(볶음밥|비빔밥|덮밥|국수|우동|라면|파스타|면$|밥$)/.test(
+      normalizedName,
+    )
+  ) {
+    return 'rice-noodle'
+  }
+
+  if (/(찌개|전골|국$|탕$)/.test(normalizedName)) {
+    return 'soup-stew'
+  }
+
+  if (
+    /(볶음|불고기|닭갈비)/.test(normalizedName)
+  ) {
+    return 'stir-fry'
+  }
+
+  if (/구이/.test(normalizedName)) {
+    return 'grill'
+  }
+
+  if (/조림/.test(normalizedName)) {
+    return 'braise'
+  }
+
+  if (/(찜|찜닭)/.test(normalizedName)) {
+    return 'steam'
+  }
+
+  if (/(전$|부침)/.test(normalizedName)) {
+    return 'pan-fry'
+  }
+
+  if (/(무침|샐러드)/.test(normalizedName)) {
+    return 'salad'
+  }
+
+  return 'other'
+}
+
+export type AiMealPlanDraftParseResult =
+  | {
+      ok: true
+      data: AiMealPlanDraftResponse
+    }
+  | {
+      ok: false
+      reason: AiMealPlanDraftParseFailureReason
+      dayIndex?: number
+    }
+
+export function parseAiMealPlanDraftOutputResult(
   value: unknown,
   request: AiMealPlanTrialRequest,
   generatedAt = new Date().toISOString(),
-): AiMealPlanDraftResponse | null {
+): AiMealPlanDraftParseResult {
   if (!value || typeof value !== 'object') {
-    return null
+    return {
+      ok: false,
+      reason: 'OUTPUT_INVALID',
+    }
   }
 
   const daysValue = (
@@ -1112,7 +1289,10 @@ export function parseAiMealPlanDraftOutput(
     daysValue.length !==
       AI_MEAL_PLAN_TRIAL_DAY_COUNT
   ) {
-    return null
+    return {
+      ok: false,
+      reason: 'DAY_COUNT_INVALID',
+    }
   }
 
   const restrictions = new Set([
@@ -1121,21 +1301,57 @@ export function parseAiMealPlanDraftOutput(
   ])
   const dayIndexes = new Set<number>()
   const menuNames = new Set<string>()
+  const recentMenuNames = new Set(
+    (request.recentMenuNames ?? []).map((name) =>
+      normalizeMenuComparisonName(name),
+    ),
+  )
+  const cookingTypeCounts = new Map<
+    AiMealCookingType,
+    number
+  >()
   const days: AiMealPlanDraftDay[] = []
 
   for (const dayValue of daysValue) {
+    if (
+      dayValue &&
+      typeof dayValue === 'object' &&
+      typeof (
+        dayValue as Record<string, unknown>
+      ).name === 'string' &&
+      !normalizeAiMenuName(
+        (
+          dayValue as Record<string, unknown>
+        ).name,
+      )
+    ) {
+      return {
+        ok: false,
+        reason: 'MENU_NAME_INVALID',
+        dayIndex:
+          typeof (
+            dayValue as Record<string, unknown>
+          ).day === 'number'
+            ? (dayValue as Record<string, number>)
+                .day
+            : undefined,
+      }
+    }
+
     const day = readDraftDay(
       dayValue,
       request.startDate,
     )
 
     if (!day) {
-      return null
+      return {
+        ok: false,
+        reason: 'DAY_INVALID',
+      }
     }
 
-    const normalizedName = day.name
-      .trim()
-      .toLowerCase()
+    const normalizedName =
+      normalizeMenuComparisonName(day.name)
     const ingredientNames = [
       ...day.mainIngredientNames,
       ...day.missingIngredientNames,
@@ -1145,28 +1361,92 @@ export function parseAiMealPlanDraftOutput(
     ).getDay()
     const isWeekday = dateDay >= 1 && dateDay <= 5
 
+    if (dayIndexes.has(day.dayIndex)) {
+      return {
+        ok: false,
+        reason: 'DUPLICATE_DAY',
+        dayIndex: day.dayIndex,
+      }
+    }
+
+    if (menuNames.has(normalizedName)) {
+      return {
+        ok: false,
+        reason: 'DUPLICATE_MENU',
+        dayIndex: day.dayIndex,
+      }
+    }
+
+    if (recentMenuNames.has(normalizedName)) {
+      return {
+        ok: false,
+        reason: 'RECENT_MENU_DUPLICATE',
+        dayIndex: day.dayIndex,
+      }
+    }
+
+    const cookingType =
+      classifyAiMealCookingType(day.name)
+    const cookingTypeCount =
+      (cookingTypeCounts.get(cookingType) ?? 0) + 1
+
     if (
-      dayIndexes.has(day.dayIndex) ||
-      menuNames.has(normalizedName) ||
+      cookingType !== 'other' &&
+      cookingTypeCount > 2
+    ) {
+      return {
+        ok: false,
+        reason: 'DIVERSITY_VIOLATION',
+        dayIndex: day.dayIndex,
+      }
+    }
+
+    if (
       ingredientNames.some((name) =>
         restrictions.has(name),
-      ) ||
-      (isWeekday &&
-        day.cookMinutes >
-          request.weekdayMaxMinutes)
+      )
     ) {
-      return null
+      return {
+        ok: false,
+        reason: 'RESTRICTION_VIOLATION',
+        dayIndex: day.dayIndex,
+      }
     }
 
     dayIndexes.add(day.dayIndex)
     menuNames.add(normalizedName)
-    days.push(day)
+    cookingTypeCounts.set(
+      cookingType,
+      cookingTypeCount,
+    )
+    days.push({
+      ...day,
+      cookMinutes: isWeekday
+        ? Math.min(
+            day.cookMinutes,
+            request.weekdayMaxMinutes,
+          )
+        : day.cookMinutes,
+    })
   }
 
   days.sort(
     (firstDay, secondDay) =>
       firstDay.dayIndex - secondDay.dayIndex,
   )
+
+  if (
+    new Set(
+      days.map((day) =>
+        classifyAiMealCookingType(day.name),
+      ),
+    ).size < 4
+  ) {
+    return {
+      ok: false,
+      reason: 'DIVERSITY_VIOLATION',
+    }
+  }
 
   const plans: PlannedMeal[] = days.map((day) => ({
     id: `${day.date}-dinner`,
@@ -1182,12 +1462,29 @@ export function parseAiMealPlanDraftOutput(
   }))
 
   return {
-    days,
-    plans,
-    meta: {
-      generatedAt,
+    ok: true,
+    data: {
+      days,
+      plans,
+      meta: {
+        generatedAt,
+      },
     },
   }
+}
+
+export function parseAiMealPlanDraftOutput(
+  value: unknown,
+  request: AiMealPlanTrialRequest,
+  generatedAt = new Date().toISOString(),
+): AiMealPlanDraftResponse | null {
+  const result = parseAiMealPlanDraftOutputResult(
+    value,
+    request,
+    generatedAt,
+  )
+
+  return result.ok ? result.data : null
 }
 
 export function validateAiMealPlanRecipeDetailRequest(
@@ -1208,6 +1505,10 @@ export function validateAiMealPlanRecipeDetailRequest(
   }
 
   const request = value as Record<string, unknown>
+  const traceId = readOptionalText(
+    request.traceId,
+    80,
+  )
   const householdSize = request.householdSize
   const includesChildren = request.includesChildren
   const childAgeGroup = readOptionalText(
@@ -1246,19 +1547,23 @@ export function validateAiMealPlanRecipeDetailRequest(
           day: dayRecord.dayIndex,
         },
         startDate,
+        true,
       )
     : null
 
   if (
     !day ||
-    day.date !== startDate ||
+    day.date !== rawDate ||
     day.recipeId !== dayRecord?.recipeId ||
     typeof householdSize !== 'number' ||
     !Number.isInteger(householdSize) ||
     householdSize < 1 ||
     householdSize > 10 ||
     typeof includesChildren !== 'boolean' ||
-    !isSpicePreference(spicePreference)
+    !isSpicePreference(spicePreference) ||
+    (request.traceId !== undefined &&
+      (!traceId ||
+        !/^[A-Za-z0-9:_-]+$/.test(traceId)))
   ) {
     return {
       ok: false,
@@ -1271,6 +1576,7 @@ export function validateAiMealPlanRecipeDetailRequest(
   return {
     ok: true,
     data: {
+      ...(traceId ? { traceId } : {}),
       day,
       householdSize,
       includesChildren,
@@ -1448,6 +1754,7 @@ export function addRecipeToStoredAiMealPlanTrial(
   source: 'golden' | 'ai',
   meta: StoredAiMealPlanTrial['response']['meta'],
   savedAt = new Date().toISOString(),
+  markCompleted = true,
 ): StoredAiMealPlanTrial | null {
   const day = storedTrial.response.days.find(
     (candidate) =>
@@ -1500,14 +1807,17 @@ export function addRecipeToStoredAiMealPlanTrial(
       storedTrial.response.plans[0].date,
       'week',
     ).ingredients
-  const firstRecipeId =
-    storedTrial.response.days[0].recipeId
   const completed =
     storedTrial.status === 'completed' ||
-    recipes.some(
-      (candidate) =>
-        candidate.id === firstRecipeId,
-    )
+    (markCompleted &&
+      recipes.length ===
+        storedTrial.response.days.length &&
+      storedTrial.response.days.every((draftDay) =>
+        recipes.some(
+          (candidate) =>
+            candidate.id === draftDay.recipeId,
+        ),
+      ))
   const candidate: StoredAiMealPlanTrial = {
     ...storedTrial,
     status: completed ? 'completed' : 'draft',
@@ -1532,6 +1842,29 @@ export function addRecipeToStoredAiMealPlanTrial(
   }
 
   return parseStoredAiMealPlanTrial(candidate)
+}
+
+export function completeStoredAiMealPlanTrial(
+  storedTrial: StoredAiMealPlanTrial,
+  savedAt = new Date().toISOString(),
+): StoredAiMealPlanTrial | null {
+  if (
+    storedTrial.response.recipes.length !==
+      storedTrial.response.days.length ||
+    !storedTrial.response.days.every((day) =>
+      storedTrial.response.recipes.some(
+        (recipe) => recipe.id === day.recipeId,
+      ),
+    )
+  ) {
+    return null
+  }
+
+  return parseStoredAiMealPlanTrial({
+    ...storedTrial,
+    status: 'completed',
+    usedAt: storedTrial.usedAt ?? savedAt,
+  })
 }
 
 function isStoredDetailedRecipe(value: unknown) {
@@ -1854,6 +2187,7 @@ export function parseStoredAiMealPlanTrial(
         day: dayRecord.dayIndex,
       },
       startDate,
+      true,
     )
 
     return parsedDay &&
@@ -1999,43 +2333,12 @@ export type AiMealPlanTrialFailureState = {
 export function getAiMealPlanTrialFailureState(
   errorCode?: string,
 ): AiMealPlanTrialFailureState {
-  if (errorCode === 'AI_TRIAL_TIMEOUT') {
-    return {
-      title: '식단 생성 시간이 길어지고 있어요',
-      message:
-        '무료 체험은 사용 처리되지 않았어요. 잠시 후 다시 시도해 주세요.',
-      trialConsumed: false,
-      canRetry: true,
-    }
-  }
-
-  if (errorCode === 'AI_NETWORK_ERROR') {
-    return {
-      title: '인터넷 연결을 확인해 주세요',
-      message:
-        '인터넷 연결을 확인한 뒤 다시 시도해 주세요.',
-      trialConsumed: false,
-      canRetry: true,
-    }
-  }
-
-  if (
-    errorCode === 'AI_RESPONSE_INVALID' ||
-    errorCode === 'AI_RESPONSE_TOO_LARGE'
-  ) {
-    return {
-      title: '식단을 안전하게 완성하지 못했어요',
-      message:
-        '안전하게 사용할 수 있는 식단을 완성하지 못했어요. 무료 체험은 사용 처리되지 않았습니다.',
-      trialConsumed: false,
-      canRetry: true,
-    }
-  }
-
   return {
-    title: 'AI 서비스 연결이 원활하지 않아요',
+    title: '식단을 완성하지 못했어요.',
     message:
-      '잠시 후 다시 시도해 주세요. 무료 체험은 사용 처리되지 않았어요.',
+      errorCode === 'INPUT_INVALID'
+        ? '입력한 조건을 확인한 뒤 다시 시도해 주세요. 무료 체험은 사용되지 않았습니다.'
+        : '잠시 후 다시 시도해 주세요. 무료 체험은 사용되지 않았습니다.',
     trialConsumed: false,
     canRetry: true,
   }

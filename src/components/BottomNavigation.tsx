@@ -2,7 +2,7 @@ import {
   ChefHat,
   CircleUser,
   Home,
-  PackageOpen,
+  Refrigerator,
   ShoppingCart,
   type LucideIcon,
 } from 'lucide-react'
@@ -15,6 +15,7 @@ export type PageName =
   | 'recipes'
   | 'settings'
   | 'guide'
+  | 'feedback'
 
 type BottomNavigationProps = {
   currentPage: PageName
@@ -40,7 +41,7 @@ const navigationItems: {
   {
     page: 'inventory',
     label: '냉장고',
-    icon: PackageOpen,
+    icon: Refrigerator,
   },
   {
     page: 'settings',

@@ -8,6 +8,7 @@
   --color-primary-active: #315e43;
   --color-primary-subtle: #eaf3ed;
   --color-primary-dark: var(--color-primary-hover);
+  --bottom-nav-height: 88px;
   --color-on-primary: #ffffff;
   --color-accent: #f29b63;
   --color-accent-hover: #e7844b;
@@ -38,6 +39,7 @@
   --color-text-muted: #6e786f;
   --color-text-disabled: #aaa399;
   --color-text-light: var(--color-text-muted);
+  --color-ingredient-quantity: var(--color-primary-dark);
   --color-focus-ring: rgba(78, 139, 103, 0.25);
 
   /* Typography */

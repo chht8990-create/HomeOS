@@ -19,7 +19,13 @@ const locationLabels: Record<InventoryLocation, string> = {
   pantry: '실온',
 }
 
-function InventoryPage() {
+type InventoryPageProps = {
+  onOpenRecommendations: () => void
+}
+
+function InventoryPage({
+  onOpenRecommendations,
+}: InventoryPageProps) {
   const nameInputRef = useRef<HTMLInputElement>(null)
   const [name, setName] = useState('')
   const [quantity, setQuantity] = useState('1')
@@ -109,6 +115,27 @@ function InventoryPage() {
       />
 
       <main className="app-content">
+        {items.length > 0 ? (
+          <Section title="이 재료로 만들 메뉴 찾기">
+            <Card>
+              <div className="inventory-summary">
+                <div className="inventory-summary__content">
+                  <p className="inventory-summary__description">
+                    냉장고 재료와 저장된 레시피를 비교해
+                    만들기 좋은 메뉴를 찾아보세요.
+                  </p>
+                </div>
+                <Button
+                  fullWidth
+                  onClick={onOpenRecommendations}
+                >
+                  저장된 레시피에서 찾기
+                </Button>
+              </div>
+            </Card>
+          </Section>
+        ) : null}
+
         <Section
           title={
             editingId
@@ -211,7 +238,7 @@ function InventoryPage() {
 
         <Section
           title="보관 중인 재료"
-          description={`${items.length}개 품목이 있어요.`}
+          description={`재료 ${items.length}개가 있어요.`}
         >
           <Card>
             {items.length === 0 ? (

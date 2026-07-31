@@ -4,6 +4,7 @@ import {
 } from 'react'
 import {
   BookOpen,
+  MessageSquareText,
   PackageOpen,
   RotateCcw,
   Ruler,
@@ -21,6 +22,7 @@ import { measurementToolOptions } from '../services/measurementEngine'
 import type { HomeOsBackup } from '../services/homeOsBackupEngine'
 import type { MealType } from '../types/meal'
 import type { MealPackPreview } from '../services/mealPackEngine'
+import { APP_VERSION } from '../config/app'
 
 const mealTypeLabels: Record<MealType, string> = {
   breakfast: '아침',
@@ -31,11 +33,13 @@ const mealTypeLabels: Record<MealType, string> = {
 
 type SettingsPageProps = {
   onOpenGuide: () => void
+  onOpenFeedback: () => void
   onReplayTutorial: () => void
 }
 
 function SettingsPage({
   onOpenGuide,
+  onOpenFeedback,
   onReplayTutorial,
 }: SettingsPageProps) {
   const { prepare, apply } = useMealPackImport()
@@ -235,23 +239,23 @@ function SettingsPage({
             <ul className="inventory-list">
               <li className="inventory-item">
                 <strong>앱 버전</strong>
-                <span>1.0.1</span>
+                <span>{APP_VERSION}</span>
               </li>
               <li className="inventory-item">
                 <strong>데이터 저장 위치</strong>
                 <span>이 기기</span>
               </li>
               <li className="inventory-item">
-                <strong>개인정보 전송</strong>
-                <span>하지 않음</span>
+                <strong>피드백 전송 정보</strong>
+                <span>작성한 의견·기기 정보</span>
               </li>
             </ul>
           </Card>
         </Section>
 
         <Section
-          title="집에 있는 계량도구"
-          description="선택한 도구를 레시피 계량 도우미에서 먼저 보여드려요."
+          title="집에서 사용할 수 있는 계량도구"
+          description="선택한 도구에 맞춰 레시피 계량법을 보여드려요."
         >
           <Card className="settings-measurement-card">
             <div className="settings-measurement-card__heading">
@@ -269,7 +273,7 @@ function SettingsPage({
 
             <fieldset className="settings-tool-list">
               <legend className="ui-visually-hidden">
-                집에 있는 계량도구
+                집에서 사용할 수 있는 계량도구
               </legend>
               {measurementToolOptions.map(
                 (option) => (
@@ -317,6 +321,23 @@ function SettingsPage({
                 aria-hidden="true"
               />
               튜토리얼 다시 보기
+            </Button>
+            <Button
+              variant="secondary"
+              fullWidth
+              onClick={onOpenFeedback}
+            >
+              <MessageSquareText
+                size={18}
+                aria-hidden="true"
+              />
+              <span className="settings-help-card__copy">
+                <strong>의견 보내기</strong>
+                <small>
+                  불편한 점이나 바라는 기능을
+                  알려주세요.
+                </small>
+              </span>
             </Button>
           </Card>
         </Section>

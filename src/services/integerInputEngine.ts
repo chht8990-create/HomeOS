@@ -23,3 +23,21 @@ export function normalizePositiveIntegerInput(
 
   return Math.min(max, Math.max(min, safeValue))
 }
+
+export function normalizePositiveIntegerDraft(
+  rawValue: string,
+  options: PositiveIntegerInputOptions,
+) {
+  const trimmedValue = rawValue.trim()
+
+  if (trimmedValue === '') {
+    return ''
+  }
+
+  return String(
+    normalizePositiveIntegerInput(
+      trimmedValue.replace(/^0+(?=\d)/, ''),
+      options,
+    ),
+  )
+}

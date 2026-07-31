@@ -6,12 +6,14 @@ import {
 } from 'react'
 import {
   CalendarDays,
+  Check,
   ChevronLeft,
   ChevronRight,
   RotateCcw,
   ShoppingCart,
   Sparkles,
   Trash2,
+  Utensils,
 } from 'lucide-react'
 import RecipeRecommendationBlock from '../blocks/RecipeRecommendationBlock'
 import type { PageName } from '../components/BottomNavigation'
@@ -28,6 +30,7 @@ import Section from '../components/ui/Section'
 import Spinner from '../components/ui/Spinner'
 import StyledSelect from '../components/ui/StyledSelect'
 import Toast from '../components/ui/Toast'
+import { resolveRecipeImage } from '../data/recipeImages'
 import useAiMealPlanTrial from '../hooks/useAiMealPlanTrial'
 import useHistoryModal from '../hooks/useHistoryModal'
 import useInventory from '../hooks/useInventory'
@@ -43,8 +46,17 @@ import {
   type MealPlanViewRange,
 } from '../services/defaultMealPlanEngine'
 import {
+  getRecentMealPlanMenuNames,
   getAiMealPlanTrialFailureState,
 } from '../services/aiMealPlanTrialEngine'
+import {
+  createAiMealPlanPipelineError,
+  createAiMealPlanPipelineTraceId,
+  isAiMealPlanPipelineError,
+  logAiMealPlanPipelineTrace,
+  type AiMealPlanPipelineErrorCode,
+  type AiMealPlanPipelineStage,
+} from '../services/aiMealPlanPipelineEngine'
 import {
   createMealPlanRangeShoppingSourceId,
   createMealPlanShoppingIngredients,
@@ -114,9 +126,81 @@ type MealPlanFeedback = {
   message: string
 }
 
+const pipelineFallbackErrorCodes: Record<
+  AiMealPlanPipelineStage,
+  AiMealPlanPipelineErrorCode
+> = {
+  DRAFT_GENERATION: 'NETWORK_ERROR',
+  DRAFT_VALIDATION: 'OPENAI_RESPONSE_INVALID',
+  MENU_NORMALIZATION: 'MENU_NAME_INVALID',
+  MENU_DIVERSITY_VALIDATION:
+    'MENU_DIVERSITY_INVALID',
+  RECIPE_DETAIL_GENERATION:
+    'RECIPE_DETAIL_FAILED',
+  INGREDIENT_NORMALIZATION:
+    'INGREDIENT_NORMALIZATION_FAILED',
+  IMAGE_RESOLUTION: 'IMAGE_KEY_FAILED',
+  PLANNER_SAVE: 'PLANNER_SAVE_FAILED',
+  SHOPPING_PREPARE: 'SHOPPING_PREPARE_FAILED',
+  TRIAL_COMPLETE: 'TRIAL_COMPLETE_FAILED',
+  ROLLBACK: 'STORAGE_SAVE_FAILED',
+}
+
 type AiFailureFeedback = ReturnType<
   typeof getAiMealPlanTrialFailureState
 >
+
+const PLANNER_SECTION_STATE_KEY =
+  'today-table.planner.sections.v1'
+
+type PlannerSectionState = {
+  schedule: boolean
+  recommendations: boolean
+  shopping: boolean
+  aiTrial: boolean
+}
+
+const defaultPlannerSectionState: PlannerSectionState = {
+  schedule: false,
+  recommendations: true,
+  shopping: true,
+  aiTrial: true,
+}
+
+function readPlannerSectionState() {
+  if (typeof window === 'undefined') {
+    return defaultPlannerSectionState
+  }
+
+  try {
+    const stored = JSON.parse(
+      window.localStorage.getItem(
+        PLANNER_SECTION_STATE_KEY,
+      ) ?? '{}',
+    ) as Partial<PlannerSectionState>
+
+    return {
+      schedule:
+        typeof stored.schedule === 'boolean'
+          ? stored.schedule
+          : defaultPlannerSectionState.schedule,
+      recommendations:
+        typeof stored.recommendations === 'boolean'
+          ? stored.recommendations
+          : defaultPlannerSectionState.recommendations,
+      shopping:
+        typeof stored.shopping === 'boolean'
+          ? stored.shopping
+          : defaultPlannerSectionState.shopping,
+      aiTrial:
+        typeof stored.aiTrial === 'boolean'
+          ? stored.aiTrial
+          : defaultPlannerSectionState.aiTrial,
+    }
+  } catch {
+    return defaultPlannerSectionState
+  }
+}
 
 const aiLoadingStages = [
   '가족 조건 분석 중',
@@ -160,6 +244,8 @@ function MealPlanPage({
     useRef<HTMLDivElement>(null)
   const aiAbortControllerRef =
     useRef<AbortController | null>(null)
+  const savedMealFeedbackTimeoutRef =
+    useRef<number | null>(null)
   const {
     mealPlans,
     saveMealPlan,
@@ -169,14 +255,21 @@ function MealPlanPage({
   } = useMealPlan()
   const { recipes } = useRecipes()
   const { items: inventoryItems } = useInventory()
-  const { replaceMealPlanRangeItems } =
-    useShoppingList()
+  const {
+    items: shoppingItems,
+    replaceMealPlanRangeItems,
+    replaceAllItems: replaceAllShoppingItems,
+  } = useShoppingList()
   const {
     storedTrial,
     isGenerating,
     generatingRecipeIds,
+    recipeDetailGenerationStates,
     generateTrial,
     ensureRecipeDetail,
+    clearRecipeDetailGenerationError,
+    completeTrial,
+    discardIncompleteTrial,
   } = useAiMealPlanTrial()
   const [date, setDate] = useState(getTodayDateKey)
   const [mealType, setMealType] =
@@ -189,6 +282,14 @@ function MealPlanPage({
     useState<string | null>(null)
   const [feedback, setFeedback] =
     useState<MealPlanFeedback | null>(null)
+  const [savedMealFeedback, setSavedMealFeedback] =
+    useState<string | null>(null)
+  const [highlightedMealPlanId, setHighlightedMealPlanId] =
+    useState<string | null>(null)
+  const [sectionState, setSectionState] =
+    useState<PlannerSectionState>(
+      readPlannerSectionState,
+    )
   const [rangeStartDate, setRangeStartDate] =
     useState(getTodayDateKey)
   const [viewRange, setViewRange] =
@@ -216,12 +317,26 @@ function MealPlanPage({
     aiLoadingStageIndex,
     setAiLoadingStageIndex,
   ] = useState(0)
-  const [aiDetailErrors, setAiDetailErrors] =
-    useState<Record<string, string>>({})
   const aiFailureModal =
     useHistoryModal<AiFailureFeedback>(
       'ai-meal-plan-failure',
     )
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      PLANNER_SECTION_STATE_KEY,
+      JSON.stringify(sectionState),
+    )
+  }, [sectionState])
+
+  function toggleSection(
+    section: keyof PlannerSectionState,
+  ) {
+    setSectionState((current) => ({
+      ...current,
+      [section]: !current[section],
+    }))
+  }
 
   useEffect(() => {
     if (!initialRecipeName) {
@@ -271,6 +386,49 @@ function MealPlanPage({
     }
   }, [isGenerating])
 
+  useEffect(
+    () => () => {
+      if (
+        savedMealFeedbackTimeoutRef.current !==
+        null
+      ) {
+        window.clearTimeout(
+          savedMealFeedbackTimeoutRef.current,
+        )
+      }
+    },
+    [],
+  )
+
+  function clearSavedMealConfirmation() {
+    if (
+      savedMealFeedbackTimeoutRef.current !== null
+    ) {
+      window.clearTimeout(
+        savedMealFeedbackTimeoutRef.current,
+      )
+      savedMealFeedbackTimeoutRef.current = null
+    }
+
+    setSavedMealFeedback(null)
+    setHighlightedMealPlanId(null)
+  }
+
+  function showSavedMealConfirmation(
+    message: string,
+    mealPlanId: string,
+  ) {
+    clearSavedMealConfirmation()
+    setSavedMealFeedback(message)
+    setHighlightedMealPlanId(mealPlanId)
+    savedMealFeedbackTimeoutRef.current =
+      window.setTimeout(() => {
+        setSavedMealFeedback(null)
+        setHighlightedMealPlanId(null)
+        savedMealFeedbackTimeoutRef.current = null
+      }, 2800)
+  }
+
   function resetEditor() {
     setMealName('')
     setServings(4)
@@ -313,18 +471,28 @@ function MealPlanPage({
         editingId ?? undefined,
       )
       resetEditor()
-      setFeedback({
-        tone: 'success',
-        title: wasEditing
-          ? '식사 일정을 수정했어요.'
-          : '식사 일정을 저장했어요.',
-        message: `${savedMealName} 일정을 아래에서 확인해 보세요.`,
-      })
+      const savedMealPlanId = `${date}-${mealType}`
+      setFeedback(null)
+      showSavedMealConfirmation(
+        `${savedMealName} · ${formatMealPlanDate(date)} ${mealTypeLabels[mealType]}에 ${wasEditing ? '수정했어요.' : '추가했어요.'}`,
+        savedMealPlanId,
+      )
+      setSectionState((current) => ({
+        ...current,
+        schedule: false,
+      }))
 
       window.requestAnimationFrame(() => {
-        mealPlansSectionRef.current?.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start',
+        window.requestAnimationFrame(() => {
+          const savedCard =
+            mealPlansSectionRef.current?.querySelector(
+              `[data-meal-plan-id="${savedMealPlanId}"]`,
+            )
+
+          savedCard?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+          })
         })
       })
     } catch {
@@ -338,6 +506,7 @@ function MealPlanPage({
   }
 
   function startEditing(mealPlan: PlannedMeal) {
+    clearSavedMealConfirmation()
     setDate(mealPlan.date)
     setMealType(mealPlan.type)
     setMealName(mealPlan.name)
@@ -386,6 +555,7 @@ function MealPlanPage({
         candidate.name === recipeName,
     )
 
+    clearSavedMealConfirmation()
     setMealName(recipeName)
     setServings(recipe?.servings ?? 4)
     setFeedback(null)
@@ -471,21 +641,57 @@ function MealPlanPage({
       return
     }
 
-    const itemCount = replaceMealPlanRangeItems(
-      createMealPlanRangeShoppingSourceId(
-        rangeStartDate,
-        shoppingRange,
-      ),
-      result.ingredients,
-    )
+    let itemCount: number
+
+    try {
+      itemCount = replaceMealPlanRangeItems(
+        createMealPlanRangeShoppingSourceId(
+          rangeStartDate,
+          shoppingRange,
+        ),
+        result.ingredients,
+        {
+          sourceKind: 'meal_plan',
+          sourceRecipeId:
+            result.selectedMealPlans.length === 1
+              ? result.selectedMealPlans[0]
+                  .recipeId
+              : undefined,
+          sourceRecipeName: [
+            ...new Set(
+              result.selectedMealPlans.map(
+                (mealPlan) => mealPlan.name,
+              ),
+            ),
+          ].join(', '),
+          sourceMealDate: rangeStartDate,
+          sourceMealTime: '저녁',
+        },
+      )
+    } catch {
+      setFeedback({
+        tone: 'danger',
+        title: '장보기 목록을 저장하지 못했어요.',
+        message:
+          '저장 공간을 확인한 뒤 다시 시도해 주세요.',
+      })
+      return
+    }
+
+    if (itemCount === 0) {
+      setFeedback({
+        tone: 'danger',
+        title: '추가할 장보기 재료가 없어요.',
+        message:
+          '냉장고 재료와 기본 조미료를 제외하면 준비할 재료가 없어요.',
+      })
+      return
+    }
 
     setFeedback({
       tone: 'success',
       title: '장보기 목록을 만들었어요.',
-      message:
-        itemCount > 0
-          ? `냉장고 재료와 기본 조미료를 제외한 ${itemCount}개 품목을 담았어요.`
-          : '냉장고 재료만으로 만들 수 있어 추가할 품목이 없어요.',
+      message: `냉장고 재료와 기본 조미료를 제외한 ${itemCount}가지 재료를 저장했어요.`,
     })
   }
 
@@ -505,6 +711,19 @@ function MealPlanPage({
         'week',
       ),
       trial.response.weeklyShoppingIngredients,
+      {
+        sourceKind: 'meal_plan',
+        sourceRecipeName: [
+          ...new Set(
+            trial.response.plans.map(
+              (mealPlan) => mealPlan.name,
+            ),
+          ),
+        ].join(', '),
+        sourceMealDate:
+          trial.response.plans[0].date,
+        sourceMealTime: '저녁',
+      },
     )
   }
 
@@ -513,36 +732,18 @@ function MealPlanPage({
     openAfterReady = false,
     signal?: AbortSignal,
   ) {
-    setAiDetailErrors((current) => {
-      const next = { ...current }
-      delete next[day.recipeId]
-      return next
-    })
+    clearRecipeDetailGenerationError(day.recipeId)
+    const trial = await ensureRecipeDetail(
+      day,
+      signal,
+    )
 
-    try {
-      const trial = await ensureRecipeDetail(
-        day,
-        signal,
-      )
-
-      syncAiTrialShopping(trial)
-      if (openAfterReady) {
-        onOpenRecipeDetail(day.recipeId)
-      }
-
-      return trial
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : '상세 레시피를 만들지 못했어요.'
-
-      setAiDetailErrors((current) => ({
-        ...current,
-        [day.recipeId]: message,
-      }))
-      throw error
+    syncAiTrialShopping(trial)
+    if (openAfterReady) {
+      onOpenRecipeDetail(day.recipeId)
     }
+
+    return trial
   }
 
   function handleOpenAiRecipe(
@@ -564,11 +765,7 @@ function MealPlanPage({
   }
 
   function dismissAiDetailError(recipeId: string) {
-    setAiDetailErrors((current) => {
-      const next = { ...current }
-      delete next[recipeId]
-      return next
-    })
+    clearRecipeDetailGenerationError(recipeId)
   }
 
   async function runAiTrialGeneration() {
@@ -576,15 +773,48 @@ function MealPlanPage({
       return
     }
 
+    const traceId =
+      createAiMealPlanPipelineTraceId()
+    let activeStage: AiMealPlanPipelineStage =
+      'DRAFT_GENERATION'
+    let stageStartedAt = performance.now()
+    let menuCount = 0
+    let savedCount = 0
+    const beginStage = (
+      stage: AiMealPlanPipelineStage,
+    ) => {
+      activeStage = stage
+      stageStartedAt = performance.now()
+    }
+    const finishStage = () => {
+      logAiMealPlanPipelineTrace({
+        traceId,
+        stage: activeStage,
+        status: 'success',
+        durationMs: Math.round(
+          performance.now() - stageStartedAt,
+        ),
+        menuCount,
+        savedCount,
+      })
+    }
+
     setAiLoadingStageIndex(0)
     setFeedback(null)
     const abortController = new AbortController()
     aiAbortControllerRef.current = abortController
+    const previousMealPlans = structuredClone(mealPlans)
+    const previousShoppingItems =
+      structuredClone(shoppingItems)
+    let plannerApplied = false
+    let shoppingApplied = false
 
     try {
+      const todayDateKey = getTodayDateKey()
       const trial = await generateTrial(
         {
-          startDate: getTodayDateKey(),
+          traceId,
+          startDate: todayDateKey,
           householdSize,
           includesChildren,
           ...(includesChildren &&
@@ -618,59 +848,225 @@ function MealPlanPage({
               unit,
             }),
           ),
+          recentMenuNames:
+            getRecentMealPlanMenuNames(
+              mealPlans,
+              todayDateKey,
+            ),
         },
         abortController.signal,
       )
 
-      replaceMealPlanSlots(trial.response.plans)
+      menuCount = trial.response.days.length
+      finishStage()
+
+      beginStage('DRAFT_VALIDATION')
+      if (
+        trial.response.days.length !== 7 ||
+        trial.response.plans.length !== 7
+      ) {
+        throw createAiMealPlanPipelineError(
+          undefined,
+          activeStage,
+          'OPENAI_RESPONSE_INVALID',
+          'AI 식단 초안의 날짜 수가 올바르지 않습니다.',
+        )
+      }
+      finishStage()
+
+      beginStage('MENU_NORMALIZATION')
+      if (
+        trial.response.days.some(
+          (day, index) =>
+            !day.name.trim() ||
+            trial.response.plans[index]?.name !==
+              day.name,
+        )
+      ) {
+        throw createAiMealPlanPipelineError(
+          undefined,
+          activeStage,
+          'MENU_NAME_INVALID',
+          'AI 식단의 메뉴명을 확인하지 못했습니다.',
+        )
+      }
+      finishStage()
+
+      beginStage('MENU_DIVERSITY_VALIDATION')
+      if (
+        new Set(
+          trial.response.days.map((day) =>
+            day.name.trim().toLowerCase(),
+          ),
+        ).size !== trial.response.days.length
+      ) {
+        throw createAiMealPlanPipelineError(
+          undefined,
+          activeStage,
+          'MENU_DIVERSITY_INVALID',
+          'AI 식단에 중복 메뉴가 포함되어 있습니다.',
+        )
+      }
+      finishStage()
+
+      beginStage('RECIPE_DETAIL_GENERATION')
+      let detailedTrial = trial
+
+      for (const day of trial.response.days) {
+        detailedTrial = await ensureRecipeDetail(
+          day,
+          abortController.signal,
+          false,
+        )
+        savedCount =
+          detailedTrial.response.recipes.length
+      }
+
+      if (
+        savedCount !==
+        detailedTrial.response.days.length
+      ) {
+        throw createAiMealPlanPipelineError(
+          undefined,
+          activeStage,
+          'RECIPE_DETAIL_FAILED',
+          '상세 레시피를 모두 준비하지 못했습니다.',
+        )
+      }
+      finishStage()
+
+      beginStage('INGREDIENT_NORMALIZATION')
+      if (
+        detailedTrial.response.recipes.some(
+          (recipe) =>
+            recipe.ingredients.length === 0 ||
+            recipe.ingredients.some(
+              (ingredient) =>
+                !ingredient.name.trim() ||
+                !ingredient.unit.trim() ||
+                !Number.isFinite(
+                  ingredient.quantity,
+                ) ||
+                ingredient.quantity <= 0,
+            ),
+        )
+      ) {
+        throw createAiMealPlanPipelineError(
+          undefined,
+          activeStage,
+          'INGREDIENT_NORMALIZATION_FAILED',
+          '레시피 재료 단위를 정리하지 못했습니다.',
+        )
+      }
+      finishStage()
+
+      beginStage('IMAGE_RESOLUTION')
+      detailedTrial.response.days.forEach((day) => {
+        resolveRecipeImage(
+          day.recipeId,
+          day.name,
+        )
+      })
+      finishStage()
+
+      beginStage('PLANNER_SAVE')
+      replaceMealPlanSlots(
+        detailedTrial.response.plans,
+      )
+      plannerApplied = true
+      finishStage()
+
+      beginStage('SHOPPING_PREPARE')
+      syncAiTrialShopping(detailedTrial)
+      shoppingApplied = true
+      finishStage()
+
+      beginStage('TRIAL_COMPLETE')
+      const completedTrial = completeTrial()
+
+      if (
+        completedTrial.status !== 'completed' ||
+        completedTrial.response.recipes.length !==
+          completedTrial.response.days.length
+      ) {
+        throw createAiMealPlanPipelineError(
+          undefined,
+          activeStage,
+          'TRIAL_COMPLETE_FAILED',
+          '무료 체험 완료 상태를 저장하지 못했습니다.',
+        )
+      }
+      finishStage()
+
       setRangeStartDate(
-        trial.response.plans[0].date,
+        completedTrial.response.plans[0].date,
       )
       setViewRange('week')
       setFeedback({
         tone: 'success',
-        title: '맞춤 식단을 완성했어요.',
+        title: '맞춤 7일 식단을 저장했어요.',
         message:
-          '메뉴를 열면 상세 레시피도 준비해드려요.',
+          completedTrial.response
+            .recipes.length === 7
+            ? '첫날 메뉴는 검수된 레시피를 바로 연결했어요. 다른 메뉴는 열 때 준비해드려요.'
+            : '첫날 상세 레시피까지 저장했어요. 다른 메뉴는 열 때 준비해드려요.',
+      })
+    } catch (error) {
+      const pipelineError =
+        createAiMealPlanPipelineError(
+          error,
+          activeStage,
+          pipelineFallbackErrorCodes[
+            activeStage
+          ],
+          'AI 맞춤 식단을 완성하지 못했습니다.',
+        )
+
+      logAiMealPlanPipelineTrace({
+        traceId,
+        stage: pipelineError.stage,
+        status: 'failure',
+        errorCode: pipelineError.code,
+        durationMs: Math.round(
+          performance.now() - stageStartedAt,
+        ),
+        menuCount,
+        savedCount,
       })
 
-      const firstDay = trial.response.days[0]
-
-      try {
-        const completedTrial =
-          await prepareAiRecipeDetail(
-            firstDay,
-            false,
-            abortController.signal,
-          )
-
-        setFeedback({
-          tone: 'success',
-          title: '맞춤 7일 식단을 저장했어요.',
-          message:
-            completedTrial.response
-              .recipeSources[firstDay.recipeId] ===
-            'golden'
-              ? '첫날 메뉴는 검수된 레시피를 바로 연결했어요. 다른 메뉴는 열 때 준비해드려요.'
-              : '첫날 상세 레시피까지 저장했어요. 다른 메뉴는 열 때 준비해드려요.',
-        })
-      } catch {
-        setFeedback({
-          tone: 'danger',
-          title:
-            '7일 식단 초안은 안전하게 저장했어요.',
-          message:
-            '첫날 상세 레시피를 다시 준비하면 무료 체험이 완료돼요.',
-        })
+      if (plannerApplied) {
+        replaceAllMealPlans(previousMealPlans)
       }
-    } catch (error) {
+      if (plannerApplied || shoppingApplied) {
+        replaceAllShoppingItems(
+          previousShoppingItems,
+        )
+      }
+      discardIncompleteTrial()
+
+      beginStage('ROLLBACK')
+      logAiMealPlanPipelineTrace({
+        traceId,
+        stage: 'ROLLBACK',
+        status: 'success',
+        durationMs: Math.round(
+          performance.now() - stageStartedAt,
+        ),
+        menuCount,
+        savedCount: 0,
+      })
+
       const trialError =
         error instanceof AiMealPlanTrialError
           ? error
           : null
 
       if (
-        trialError?.code === 'AI_TRIAL_CANCELLED'
+        trialError?.code ===
+          'AI_TRIAL_CANCELLED' ||
+        (isAiMealPlanPipelineError(error) &&
+          error.causeCode ===
+            'AI_TRIAL_CANCELLED')
       ) {
         setFeedback({
           tone: 'success',
@@ -681,7 +1077,7 @@ function MealPlanPage({
       } else {
         aiFailureModal.openModal(
           getAiMealPlanTrialFailureState(
-            trialError?.code,
+            pipelineError.code,
           ),
         )
       }
@@ -730,20 +1126,22 @@ function MealPlanPage({
                 <DatePickerField
                   label="날짜"
                   value={date}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    clearSavedMealConfirmation()
                     setDate(event.target.value)
-                  }
+                  }}
                   required
                 />
 
                 <StyledSelect
                   label="식사 시간"
                   value={mealType}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    clearSavedMealConfirmation()
                     setMealType(
                       event.target.value as MealType,
                     )
-                  }
+                  }}
                 >
                   {mealTypeOptions.map((option) => (
                     <option
@@ -763,9 +1161,10 @@ function MealPlanPage({
                   type="text"
                   list="meal-plan-recipes"
                   value={mealName}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    clearSavedMealConfirmation()
                     setMealName(event.target.value)
-                  }
+                  }}
                   placeholder="예: 김치찌개"
                   required
                 />
@@ -785,7 +1184,10 @@ function MealPlanPage({
                 max={12}
                 defaultValue={4}
                 value={servings}
-                onValueChange={setServings}
+                onValueChange={(value) => {
+                  clearSavedMealConfirmation()
+                  setServings(value)
+                }}
                 required
               />
 
@@ -824,8 +1226,21 @@ function MealPlanPage({
           <Section
             title="저장된 식사 일정"
             description={`${rangeStartDate}부터 ${mealPlanRangeDays[viewRange]}일을 보고 있어요.`}
+            collapsible
+            collapsed={sectionState.schedule}
+            onToggle={() =>
+              toggleSection('schedule')
+            }
           >
             <Card>
+              {savedMealFeedback ? (
+                <p
+                  className="meal-plan-save-feedback"
+                  role="status"
+                >
+                  {savedMealFeedback}
+                </p>
+              ) : null}
               <div className="meal-plan-toolbar">
                 <div
                   className="meal-plan-range-tabs"
@@ -922,7 +1337,13 @@ function MealPlanPage({
                     (mealPlan) => (
                       <li
                         key={mealPlan.id}
-                        className="inventory-item"
+                        data-meal-plan-id={mealPlan.id}
+                        className={`inventory-item${
+                          highlightedMealPlanId ===
+                          mealPlan.id
+                            ? ' inventory-item--highlighted'
+                            : ''
+                        }`}
                       >
                         <div className="inventory-item__content">
                           <div className="inventory-item__top">
@@ -1043,9 +1464,28 @@ function MealPlanPage({
           </Section>
         </div>
 
+        <RecipeRecommendationBlock
+          onSelectRecipe={
+            handleSelectRecommendedRecipe
+          }
+          onViewRecipe={onOpenRecipeDetail}
+          onOpenInventory={() =>
+            onChangePage('inventory')
+          }
+          collapsed={sectionState.recommendations}
+          onToggle={() =>
+            toggleSection('recommendations')
+          }
+        />
+
         <Section
           title="식단으로 장보기"
           description="선택한 기간의 재료를 합치고 냉장고에 있는 양을 제외해요."
+          collapsible
+          collapsed={sectionState.shopping}
+          onToggle={() =>
+            toggleSection('shopping')
+          }
         >
           <Card>
             <div className="meal-plan-shopping">
@@ -1093,6 +1533,11 @@ function MealPlanPage({
           <Section
             title="AI 맞춤 7일 식단 무료 체험"
             description="우리 가족 조건에 맞춘 식단을 이 기기에 한 번 저장해요."
+            collapsible
+            collapsed={sectionState.aiTrial}
+            onToggle={() =>
+              toggleSection('aiTrial')
+            }
           >
             <Card>
               {storedTrial ? (
@@ -1179,12 +1624,50 @@ function MealPlanPage({
                           generatingRecipeIds.includes(
                             day.recipeId,
                           )
+                        const imageResolution =
+                          resolveRecipeImage(
+                            day.recipeId,
+                            day.name,
+                          )
 
                         return (
                         <li
                           key={day.recipeId}
                           className="ai-trial-recipe-card"
+                          data-image-key={
+                            imageResolution?.imageKey
+                          }
+                          data-image-match={
+                            imageResolution?.match ??
+                            'placeholder'
+                          }
                         >
+                          {imageResolution ? (
+                            <img
+                              className="ai-trial-recipe-card__image"
+                              src={imageResolution.src}
+                              alt={`${day.name} 음식 사진`}
+                              loading="lazy"
+                              decoding="async"
+                            />
+                          ) : (
+                            <div
+                              className="ai-trial-recipe-card__image ai-trial-recipe-card__image--placeholder"
+                              role="img"
+                              aria-label={`${day.name} 대표 사진 없음`}
+                            >
+                              <Utensils
+                                size={26}
+                                aria-hidden="true"
+                              />
+                              <small>
+                                대표 사진이 아직 없어요.
+                              </small>
+                              <small>
+                                레시피는 정상적으로 이용할 수 있습니다.
+                              </small>
+                            </div>
+                          )}
                           <div className="ai-trial-recipe-card__heading">
                             <strong>{day.name}</strong>
                             <span className="ai-trial-recipe-card__meta">
@@ -1222,9 +1705,9 @@ function MealPlanPage({
                                 ? '레시피 보기'
                                 : '상세 레시피 준비'}
                           </Button>
-                          {aiDetailErrors[
+                          {recipeDetailGenerationStates[
                             day.recipeId
-                          ] ? (
+                          ]?.status === 'error' ? (
                             <div
                               role="alert"
                               className="ai-trial-inline-warning"
@@ -1309,7 +1792,15 @@ function MealPlanPage({
                       }
                       disabled={isGenerating}
                     />
-                    아이와 함께 먹어요
+                    <span
+                      className="ai-trial-checkbox__visual"
+                      aria-hidden="true"
+                    >
+                      <Check size={15} strokeWidth={3} />
+                    </span>
+                    <span className="ai-trial-checkbox__label">
+                      아이와 함께 먹어요
+                    </span>
                   </label>
 
                   {includesChildren ? (
@@ -1463,22 +1954,19 @@ function MealPlanPage({
           </Section>
         </div>
 
-        <RecipeRecommendationBlock
-          onSelectRecipe={
-            handleSelectRecommendedRecipe
-          }
-          onViewRecipe={onOpenRecipeDetail}
-          onOpenInventory={() =>
-            onChangePage('inventory')
-          }
-        />
       </main>
 
       <Dialog
         className="ai-trial-failure-dialog"
         open={aiFailureModal.isOpen}
-        title="레시피 준비가 조금 늦어지고 있어요."
-        description="잠시 후 다시 시도하면 이어서 준비할 수 있습니다."
+        title={
+          aiFailureModal.value?.title ??
+          '식단을 완성하지 못했어요.'
+        }
+        description={
+          aiFailureModal.value?.message ??
+          '잠시 후 다시 시도해 주세요.'
+        }
         onClose={aiFailureModal.closeModal}
         footer={
           <>
@@ -1497,10 +1985,7 @@ function MealPlanPage({
           </>
         }
       >
-        <p className="ai-trial-failure-note">
-          실패한 결과는 저장하지 않았고 무료 체험도
-          사용 처리하지 않았어요.
-        </p>
+        {null}
       </Dialog>
 
       {feedback ? (

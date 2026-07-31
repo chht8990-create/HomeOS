@@ -11,7 +11,7 @@ import type {
   AiMealPlanTrialRequest,
 } from '../types/aiMealPlanTrial'
 
-const REQUEST_TIMEOUT_MS = 30_000
+const REQUEST_TIMEOUT_MS = 40_000
 const MAX_DRAFT_RESPONSE_BYTES = 120_000
 const MAX_DETAIL_RESPONSE_BYTES = 240_000
 
@@ -62,7 +62,6 @@ function requestJson<T>({
   body,
   parse,
   maxResponseBytes,
-  timeoutCode,
   timeoutMessage,
   externalSignal,
 }: {
@@ -70,7 +69,6 @@ function requestJson<T>({
   body: unknown
   parse: (value: unknown) => T | null
   maxResponseBytes: number
-  timeoutCode: string
   timeoutMessage: string
   externalSignal?: AbortSignal
 }) {
@@ -115,8 +113,8 @@ function requestJson<T>({
         responseBody = JSON.parse(responseText)
       } catch {
         throw new AiMealPlanTrialError(
-          'AI_RESPONSE_INVALID',
-          'AI 결과를 안전하게 읽지 못했어요.',
+          'JSON_PARSE_FAILED',
+          'AI 결과를 읽지 못했어요.',
         )
       }
 
@@ -135,7 +133,7 @@ function requestJson<T>({
 
       if (!parsed) {
         throw new AiMealPlanTrialError(
-          'AI_RESPONSE_INVALID',
+          'SCHEMA_VALIDATION_FAILED',
           'AI 결과 형식이 올바르지 않아요.',
         )
       }
@@ -150,7 +148,7 @@ function requestJson<T>({
         throw new AiMealPlanTrialError(
           externalSignal?.aborted
             ? 'AI_TRIAL_CANCELLED'
-            : timeoutCode,
+            : 'PIPELINE_TIMEOUT',
           externalSignal?.aborted
             ? '맞춤 식단 만들기를 취소했어요.'
             : timeoutMessage,
@@ -162,7 +160,7 @@ function requestJson<T>({
       }
 
       throw new AiMealPlanTrialError(
-        'AI_NETWORK_ERROR',
+        'API_REQUEST_FAILED',
         '네트워크 연결을 확인한 뒤 다시 시도해 주세요.',
       )
     })
@@ -185,7 +183,7 @@ export function requestAiMealPlanTrial(
   if (!validation.ok) {
     return Promise.reject(
       new AiMealPlanTrialError(
-        validation.code,
+        'INPUT_INVALID',
         validation.message,
       ),
     )
@@ -204,7 +202,6 @@ export function requestAiMealPlanTrial(
         validation.data,
       ),
     maxResponseBytes: MAX_DRAFT_RESPONSE_BYTES,
-    timeoutCode: 'AI_TRIAL_TIMEOUT',
     timeoutMessage:
       '맞춤 식단 초안 생성 시간이 길어지고 있어요. 무료 체험은 사용 처리되지 않았어요.',
     externalSignal,
@@ -225,7 +222,7 @@ export function requestAiMealPlanRecipeDetail(
   if (!validation.ok) {
     return Promise.reject(
       new AiMealPlanTrialError(
-        validation.code,
+        'INPUT_INVALID',
         validation.message,
       ),
     )
@@ -248,7 +245,6 @@ export function requestAiMealPlanRecipeDetail(
         validation.data,
       ),
     maxResponseBytes: MAX_DETAIL_RESPONSE_BYTES,
-    timeoutCode: 'AI_RECIPE_DETAIL_TIMEOUT',
     timeoutMessage:
       '상세 레시피 생성 시간이 길어졌어요. 식단은 그대로 두고 이 메뉴에서 다시 시도해 주세요.',
     externalSignal,

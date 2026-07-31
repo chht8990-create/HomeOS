@@ -1,30 +1,45 @@
 import type { Ingredient } from '../types/ingredient'
 import type { InventoryItem } from '../types/inventory'
+import { createIngredientComparisonValue } from './ingredientUnitEngine.js'
 
 export function calculateMissingIngredients(
   ingredients: Ingredient[],
   inventoryItems: InventoryItem[],
 ): Ingredient[] {
   return ingredients.flatMap((ingredient) => {
+    const required =
+      createIngredientComparisonValue(ingredient)
     const availableQuantity = inventoryItems.reduce(
-      (total, inventoryItem) =>
-        inventoryItem.name === ingredient.name &&
-        inventoryItem.unit === ingredient.unit
-          ? total + inventoryItem.quantity
-          : total,
+      (total, inventoryItem) => {
+        const available =
+          createIngredientComparisonValue(
+            inventoryItem,
+          )
+
+        return available.key === required.key &&
+          available.baseUnit === required.baseUnit
+          ? total + available.amount
+          : total
+      },
       0,
     )
 
-    const missingQuantity = ingredient.quantity - availableQuantity
+    const missingBaseQuantity =
+      required.amount - availableQuantity
 
-    if (missingQuantity <= 0) {
+    if (missingBaseQuantity <= 0) {
       return []
     }
 
     return [
       {
         ...ingredient,
-        quantity: missingQuantity,
+        quantity:
+          Math.round(
+            (missingBaseQuantity /
+              required.sourceUnitFactor) *
+              1000,
+          ) / 1000,
       },
     ]
   })

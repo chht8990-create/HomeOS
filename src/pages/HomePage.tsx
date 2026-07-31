@@ -1,4 +1,7 @@
 import {
+  Utensils,
+} from 'lucide-react'
+import {
   useRef,
   useState,
   type KeyboardEvent,
@@ -8,7 +11,7 @@ import type { PageName } from '../components/BottomNavigation'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
-import { getRecipeImage } from '../data/recipeImages'
+import { resolveRecipeImage } from '../data/recipeImages'
 import useInventory from '../hooks/useInventory'
 import useMealPlan from '../hooks/useMealPlan'
 import useRecipes from '../hooks/useRecipes'
@@ -129,19 +132,28 @@ function HomePage({
   )
   const visibleRecommendations =
     recommendations.slice(0, 5)
-  const suggestedRecipe =
-    recommendations.find(
-      (recommendation) =>
-        recommendation.recipe.name ===
-        todayDinner?.name,
-    ) ?? recommendations[0]
+  const todayRecipeRecommendation = todayDinner
+    ? recommendations.find(
+        (recommendation) =>
+          recommendation.recipe.id ===
+            todayDinner.recipeId ||
+          recommendation.recipe.name ===
+            todayDinner.name,
+      )
+    : undefined
+  const suggestedRecipe = todayDinner
+    ? todayRecipeRecommendation
+    : recommendations[0]
   const heroMealName =
     todayDinner?.name ??
     suggestedRecipe?.recipe.name ??
     '오늘 저녁 메뉴를 정해 볼까요?'
-  const heroImage = suggestedRecipe
-    ? getRecipeImage(suggestedRecipe.recipe.id)
-    : undefined
+  const heroImageResolution = resolveRecipeImage(
+    todayDinner?.recipeId ??
+      suggestedRecipe?.recipe.id,
+    heroMealName,
+  )
+  const heroImage = heroImageResolution?.src
   const missingIngredientItems =
     suggestedRecipe?.missingIngredients ?? []
   const requiredIngredientCount =
@@ -151,15 +163,11 @@ function HomePage({
       requiredIngredientCount,
       missingIngredientItems.length,
     )
-  const firstMissingIngredient =
-    missingIngredientItems[0]
   const readinessMessage = !suggestedRecipe
     ? '식사 일정에서 오늘 저녁 메뉴를 먼저 정해 보세요.'
     : missingIngredientItems.length === 0
-      ? '지금 있는 재료로 바로 만들 수 있어요.'
-      : missingIngredientItems.length === 1
-        ? `${firstMissingIngredient.name} 하나만 준비하면 만들 수 있어요.`
-        : `${firstMissingIngredient.name} 외 ${missingIngredientItems.length - 1}가지만 준비하면 만들 수 있어요.`
+      ? '지금 만들 수 있어요.'
+      : `추가 재료 ${missingIngredientItems.length}개가 필요해요.`
 
   function updateRecommendationPosition(
     scroller: HTMLDivElement,
@@ -268,8 +276,15 @@ function HomePage({
             className={`home-hero__visual ${
               heroImage
                 ? 'home-hero__visual--photo'
-                : ''
+                : 'home-hero__visual--empty'
             }`}
+            data-image-key={
+              heroImageResolution?.imageKey
+            }
+            data-image-match={
+              heroImageResolution?.match ??
+              'placeholder'
+            }
           >
             {heroImage ? (
               <img
@@ -287,15 +302,18 @@ function HomePage({
             </Badge>
 
             {!heroImage ? (
-              <>
-                <div
-                  className="home-hero__plate"
+              <span className="home-photo-empty">
+                <Utensils
+                  size={24}
                   aria-hidden="true"
                 />
-                <span className="home-hero__photo-label">
-                  오늘의 따뜻한 한 접시
+                <span>
+                  대표 사진이 아직 없어요.
                 </span>
-              </>
+                <small>
+                  레시피는 정상적으로 이용할 수 있습니다.
+                </small>
+              </span>
             ) : null}
           </div>
 
@@ -327,7 +345,20 @@ function HomePage({
                 max={100}
                 aria-label={`재료 준비율 ${ingredientReadiness}%`}
               />
-              <p>{readinessMessage}</p>
+              <div className="home-hero__readiness-message">
+                <p>{readinessMessage}</p>
+                {missingIngredientItems.length > 0 ? (
+                  <button
+                    type="button"
+                    className="home-hero__shopping-link"
+                    onClick={() =>
+                      onChangePage('shopping')
+                    }
+                  >
+                    장보기 목록 보기
+                  </button>
+                ) : null}
+              </div>
             </div>
 
             <div className="home-hero__actions">
@@ -484,11 +515,14 @@ function HomePage({
               </span>
               {recommendations.length > 0 ? (
                 visibleRecommendations
-                  .map((recommendation, index) => {
-                    const recommendationImage =
-                      getRecipeImage(
+                  .map((recommendation) => {
+                    const recommendationImageResolution =
+                      resolveRecipeImage(
                         recommendation.recipe.id,
+                        recommendation.recipe.name,
                       )
+                    const recommendationImage =
+                      recommendationImageResolution?.src
 
                     return (
                   <Card
@@ -499,8 +533,15 @@ function HomePage({
                       className={`home-recommendation-card__visual ${
                         recommendationImage
                           ? 'home-recommendation-card__visual--photo'
-                          : ''
+                          : 'home-recommendation-card__visual--empty'
                       }`}
+                      data-image-key={
+                        recommendationImageResolution?.imageKey
+                      }
+                      data-image-match={
+                        recommendationImageResolution?.match ??
+                        'placeholder'
+                      }
                     >
                       {recommendationImage ? (
                         <img
@@ -508,12 +549,20 @@ function HomePage({
                           alt={`${recommendation.recipe.name} 음식 사진`}
                         />
                       ) : null}
-                      <span aria-hidden="true">
-                        {String(index + 1).padStart(
-                          2,
-                          '0',
-                        )}
-                      </span>
+                      {!recommendationImage ? (
+                        <span className="home-recommendation-card__placeholder">
+                          <Utensils
+                            size={24}
+                            aria-hidden="true"
+                          />
+                          <small>
+                            대표 사진이 아직 없어요.
+                          </small>
+                          <small className="home-photo-empty__help">
+                            레시피는 정상적으로 이용할 수 있습니다.
+                          </small>
+                        </span>
+                      ) : null}
                     </div>
                     <div className="home-recommendation-card__body">
                       <Badge

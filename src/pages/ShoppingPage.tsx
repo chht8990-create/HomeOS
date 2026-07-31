@@ -3,6 +3,8 @@ import {
   AlertCircle,
   Check,
   ChevronDown,
+  Info,
+  MoreHorizontal,
   RotateCcw,
   ShoppingBasket,
   ShoppingCart,
@@ -23,9 +25,27 @@ import {
   groupShoppingItemsByCategory,
   type ShoppingDisplayItem,
 } from '../services/shoppingCategoryEngine'
-import { shouldShowShoppingReminder } from '../services/shoppingPurchaseEngine'
+import {
+  createShoppingReminderPreview,
+  shouldShowShoppingReminder,
+} from '../services/shoppingPurchaseEngine'
+import { createIngredientUnitPresentation } from '../services/ingredientUnitEngine'
 
 const ITEM_TRANSITION_DELAY_MS = 600
+const SHOPPING_PURCHASE_HELP_KEY =
+  'today-table.shopping.purchase-help.v1'
+
+function formatShoppingQuantity(
+  name: string,
+  quantity: number,
+  unit: string,
+) {
+  return createIngredientUnitPresentation({
+    name,
+    quantity,
+    unit,
+  }).displayText
+}
 
 type ShoppingPageProps = {
   onChangePage: (page: PageName) => void
@@ -35,7 +55,6 @@ type ShoppingItemRowProps = {
   item: ShoppingDisplayItem
   isTransitioning: boolean
   onToggle: () => void
-  onDelete: () => void
   onOpenPurchase: () => void
 }
 
@@ -43,7 +62,6 @@ function ShoppingItemRow({
   item,
   isTransitioning,
   onToggle,
-  onDelete,
   onOpenPurchase,
 }: ShoppingItemRowProps) {
   const isVisuallyCompleted = isTransitioning
@@ -60,13 +78,21 @@ function ShoppingItemRow({
       ? '식사 일정·직접 추가'
       : '식사 일정'
     : '직접 추가'
+  const sourceDetail =
+    item.sourceRecipeNames.length > 0
+      ? `${item.sourceRecipeNames.join(', ')}${
+          item.sourceMealDates[0]
+            ? ` · ${item.sourceMealDates[0]}`
+            : ''
+        }`
+      : sourceLabel
   const purchaseLabel =
     item.purchaseStatus === 'partial'
       ? '부분 구매'
       : item.purchaseStatus === 'completed'
         ? '구매 완료'
         : item.purchaseStatus === 'not-purchased'
-          ? '이번에 못 삼'
+          ? '다시 살 재료'
           : null
   const isInventoryLocked =
     item.purchaseStatus === 'completed' &&
@@ -144,9 +170,14 @@ function ShoppingItemRow({
         </span>
 
         <small className="shopping-item__quantity">
-          필요 {item.requiredQuantity} {unit}
+          필요{' '}
+          {formatShoppingQuantity(
+            item.name,
+            item.requiredQuantity,
+            unit,
+          )}
           {' · '}
-          {sourceLabel}
+          {sourceDetail}
         </small>
 
         {item.purchasedTotalQuantity > 0 ? (
@@ -157,7 +188,11 @@ function ShoppingItemRow({
               ? `구매 ${item.packageQuantity}${unit}입 ${item.purchasedPackageCount}봉`
               : `구매 ${item.purchasedTotalQuantity}${unit}`}
             {item.remainingPurchaseQuantity > 0
-              ? ` · ${item.remainingPurchaseQuantity}${unit} 더 필요`
+              ? ` · ${formatShoppingQuantity(
+                  item.name,
+                  item.remainingPurchaseQuantity,
+                  unit,
+                )} 더 필요`
               : ''}
             {item.surplusQuantity > 0
               ? ` · ${item.surplusQuantity}${unit} 남을 예정`
@@ -175,14 +210,15 @@ function ShoppingItemRow({
 
       <button
         type="button"
-        className="shopping-item__delete"
+        className="shopping-item__more"
         disabled={isTransitioning}
-        onClick={onDelete}
-        aria-label={`${item.name}${
-          isMealGenerated ? ' 식사 일정 항목' : ''
-        } 목록에서 삭제`}
+        onClick={onOpenPurchase}
+        aria-label={`${item.name} 구매 기록과 추가 동작 열기`}
       >
-        삭제
+        <MoreHorizontal
+          size={22}
+          aria-hidden="true"
+        />
       </button>
     </li>
   )
@@ -223,6 +259,28 @@ function ShoppingPage({
     setIsReminderDismissed,
   ] = useState(false)
   const [
+    isReminderExpanded,
+    setIsReminderExpanded,
+  ] = useState(false)
+  const [
+    hiddenReminderItemKeys,
+    setHiddenReminderItemKeys,
+  ] = useState<Set<string>>(() => new Set())
+  const [
+    isPurchaseHelpVisible,
+    setIsPurchaseHelpVisible,
+  ] = useState(() => {
+    if (typeof window === 'undefined') {
+      return false
+    }
+
+    return (
+      window.localStorage.getItem(
+        SHOPPING_PURCHASE_HELP_KEY,
+      ) !== 'dismissed'
+    )
+  })
+  const [
     selectedInventoryItemIds,
     setSelectedInventoryItemIds,
   ] = useState<Set<string>>(() => new Set())
@@ -234,10 +292,12 @@ function ShoppingPage({
     inventoryApplyStep,
     setInventoryApplyStep,
   ] = useState<'select' | 'navigate'>('select')
-  const [
-    outstandingItemCountAfterApply,
-    setOutstandingItemCountAfterApply,
-  ] = useState(0)
+  const [inventoryApplySummary, setInventoryApplySummary] =
+    useState({
+      appliedItemCount: 0,
+      reminderItemCount: 0,
+      plannedItemCount: 0,
+    })
   const purchaseModal =
     useHistoryModal<ShoppingDisplayItem>(
       'shopping-purchase',
@@ -245,6 +305,10 @@ function ShoppingPage({
   const inventoryModal =
     useHistoryModal<'inventory-apply'>(
       'shopping-inventory-apply',
+    )
+  const reminderActionsModal =
+    useHistoryModal<ShoppingDisplayItem>(
+      'shopping-reminder-actions',
     )
   const transitioningItemKeysRef = useRef(
     new Set<string>(),
@@ -262,7 +326,6 @@ function ShoppingPage({
     setItemsCompleted,
     recordPurchase,
     markItemsNotPurchased,
-    markItemIdsForReminder,
     restoreReminderItemIds,
     deleteItems,
     clearCompletedItems,
@@ -286,9 +349,88 @@ function ShoppingPage({
     reminderCategoryGroups.flatMap(
       (group) => group.items,
     )
+  const visibleReminderDisplayItems =
+    reminderDisplayItems.filter(
+      (item) =>
+        !hiddenReminderItemKeys.has(item.key),
+    )
+  const latestMealBatchId = [...remainingItems]
+    .filter(
+      (item) =>
+        item.source === 'meal' && item.batchId,
+    )
+    .sort((first, second) =>
+      second.createdAt.localeCompare(
+        first.createdAt,
+      ),
+    )[0]?.batchId
+  const remainingSourceGroups = [
+    {
+      key: 'new',
+      title: '이번 장보기',
+      matches: (item: ShoppingDisplayItem) =>
+        Boolean(
+          latestMealBatchId &&
+            item.batchIds.includes(
+              latestMealBatchId,
+            ),
+        ),
+    },
+    {
+      key: 'existing',
+      title: '기존 구매 예정',
+      matches: (item: ShoppingDisplayItem) =>
+        item.sourceTypes.includes('meal') &&
+        !(
+          latestMealBatchId &&
+          item.batchIds.includes(
+            latestMealBatchId,
+          )
+        ),
+    },
+    {
+      key: 'manual',
+      title: '직접 추가한 재료',
+      matches: (item: ShoppingDisplayItem) =>
+        !item.sourceTypes.includes('meal'),
+    },
+  ].flatMap((sourceGroup) => {
+    const categoryGroups =
+      remainingCategoryGroups.flatMap(
+        (categoryGroup) => {
+          const items = categoryGroup.items.filter(
+            sourceGroup.matches,
+          )
+
+          return items.length > 0
+            ? [
+                {
+                  ...categoryGroup,
+                  items,
+                },
+              ]
+            : []
+        },
+      )
+
+    return categoryGroups.length > 0
+      ? [
+          {
+            key: sourceGroup.key,
+            title: sourceGroup.title,
+            categoryGroups,
+          },
+        ]
+      : []
+  })
+  const reminderPreview =
+    createShoppingReminderPreview(
+      visibleReminderDisplayItems,
+      isReminderExpanded,
+    )
   const isReminderVisible =
     shouldShowShoppingReminder(
-      reminderDisplayItems.length,
+      visibleReminderDisplayItems.length,
       isReminderDismissed,
     )
   const inventoryCandidateItems = [
@@ -554,7 +696,11 @@ function ShoppingPage({
       new Set(candidateIds),
     )
     setInventoryApplyStep('select')
-    setOutstandingItemCountAfterApply(0)
+    setInventoryApplySummary({
+      appliedItemCount: 0,
+      reminderItemCount: 0,
+      plannedItemCount: 0,
+    })
     setIsInventoryItemSelectionOpen(false)
     inventoryModal.openModal('inventory-apply')
   }
@@ -592,25 +738,16 @@ function ShoppingPage({
     setInventoryApplyMessage('')
 
     try {
-      const appliedItemCount =
+      const result =
         applyCompletedItemsToInventory(
           itemIds,
         )
 
-      if (appliedItemCount > 0) {
-        markItemIdsForReminder(
-          [
-            ...remainingDisplayItems,
-            ...reminderDisplayItems,
-          ].flatMap((item) => item.itemIds),
-        )
+      if (result.appliedItemCount > 0) {
         setInventoryApplyMessage(
-          `냉장고에 ${appliedItemCount}가지 재료를 넣었어요.`,
+          `냉장고에 ${result.appliedItemCount}가지 재료를 넣었어요.`,
         )
-        setOutstandingItemCountAfterApply(
-          remainingDisplayItems.length +
-            reminderDisplayItems.length,
-        )
+        setInventoryApplySummary(result)
         setInventoryApplyStep('navigate')
       }
     } finally {
@@ -621,7 +758,11 @@ function ShoppingPage({
 
   function handleCloseInventoryModal() {
     setInventoryApplyStep('select')
-    setOutstandingItemCountAfterApply(0)
+    setInventoryApplySummary({
+      appliedItemCount: 0,
+      reminderItemCount: 0,
+      plannedItemCount: 0,
+    })
     inventoryModal.closeModal()
   }
 
@@ -643,19 +784,38 @@ function ShoppingPage({
     }
   }
 
+  function handleExcludeReminderItem(
+    item: ShoppingDisplayItem,
+  ) {
+    setHiddenReminderItemKeys((current) => {
+      const next = new Set(current)
+
+      next.add(item.key)
+      return next
+    })
+  }
+
+  function dismissPurchaseHelp() {
+    window.localStorage.setItem(
+      SHOPPING_PURCHASE_HELP_KEY,
+      'dismissed',
+    )
+    setIsPurchaseHelpVisible(false)
+  }
+
   return (
     <>
       <ScreenHeader
         title="장보기 목록"
-        description="필요한 품목을 확인하고 하나씩 체크해 보세요."
+        description="필요한 재료를 확인하고 하나씩 체크해 보세요."
       />
 
       <main className="app-content">
         {isReminderVisible ? (
           <Section
             className="shopping-reminder-section"
-            title={`지난 장보기에서 못 산 품목이 ${reminderDisplayItems.length}개 있어요.`}
-            description="다음 장보기에 다시 포함하거나 목록에서 정리할 수 있어요."
+            title="다시 살 재료"
+            description={`지난 장보기에서 구하지 못한 재료 ${visibleReminderDisplayItems.length}개예요.`}
           >
             <Card>
               <div className="shopping-reminder">
@@ -664,18 +824,36 @@ function ShoppingPage({
                   aria-hidden="true"
                 />
                 <ul>
-                  {reminderDisplayItems.map((item) => (
+                  {reminderPreview.visibleItems.map((item) => (
                     <li key={item.key}>
                       <span>
                         <strong>{item.name}</strong>
                         <small>
-                          {item.remainingPurchaseQuantity ||
-                            item.requiredQuantity}
-                          {item.quantities[0]?.unit ?? '개'}{' '}
+                          {formatShoppingQuantity(
+                            item.name,
+                            item.remainingPurchaseQuantity ||
+                              item.requiredQuantity,
+                            item.quantities[0]?.unit ??
+                              '개',
+                          )}{' '}
                           남음
+                          {item.sourceRecipeNames.length >
+                          0
+                            ? ` · ${item.sourceRecipeNames.join(
+                                ', ',
+                              )}`
+                            : ''}
                         </small>
                       </span>
                       <div className="shopping-reminder__item-actions">
+                        <Button
+                          variant="secondary"
+                          onClick={() =>
+                            handleOpenPurchase(item)
+                          }
+                        >
+                          구매 완료
+                        </Button>
                         <Button
                           variant="secondary"
                           onClick={() =>
@@ -688,8 +866,33 @@ function ShoppingPage({
                             size={16}
                             aria-hidden="true"
                           />
-                          목록에 다시 포함
+                          이번 장보기에 포함
                         </Button>
+                        <Button
+                          variant="secondary"
+                          onClick={() =>
+                            handleExcludeReminderItem(
+                              item,
+                            )
+                          }
+                        >
+                          이번 목록에서 제외
+                        </Button>
+                        <button
+                          type="button"
+                          className="shopping-reminder__more-actions"
+                          aria-label={`${item.name} 다시 살 재료 추가 동작 열기`}
+                          onClick={() =>
+                            reminderActionsModal.openModal(
+                              item,
+                            )
+                          }
+                        >
+                          <MoreHorizontal
+                            size={20}
+                            aria-hidden="true"
+                          />
+                        </button>
                         <Button
                           variant="danger"
                           onClick={() =>
@@ -702,12 +905,32 @@ function ShoppingPage({
                     </li>
                   ))}
                 </ul>
+                {reminderPreview.hiddenCount > 0 ? (
+                  <p className="shopping-reminder__more">
+                    외 {reminderPreview.hiddenCount}개
+                  </p>
+                ) : null}
                 <div className="shopping-reminder__actions">
+                  {reminderPreview.canToggle ? (
+                    <Button
+                      variant="secondary"
+                      onClick={() =>
+                        setIsReminderExpanded(
+                          (current) => !current,
+                        )
+                      }
+                    >
+                      {reminderPreview.isExpanded
+                        ? '접기'
+                        : '모두 보기'}
+                    </Button>
+                  ) : null}
                   <Button
                     variant="secondary"
-                    onClick={() =>
+                    onClick={() => {
+                      setIsReminderExpanded(false)
                       setIsReminderDismissed(true)
-                    }
+                    }}
                   >
                     나중에
                   </Button>
@@ -715,6 +938,26 @@ function ShoppingPage({
               </div>
             </Card>
           </Section>
+        ) : null}
+
+        {!isShoppingEmpty &&
+        isPurchaseHelpVisible ? (
+          <Card
+            className="shopping-action-help"
+          >
+            <Info size={20} aria-hidden="true" />
+            <p>
+              재료나 오른쪽 더보기 버튼을 눌러 실제
+              구매량을 기록하거나, 이번에 못 산 재료로
+              남길 수 있어요.
+            </p>
+            <Button
+              variant="ghost"
+              onClick={dismissPurchaseHelp}
+            >
+              확인했어요
+            </Button>
+          </Card>
         ) : null}
 
         {!isShoppingEmpty ? (
@@ -743,7 +986,7 @@ function ShoppingPage({
 
         <Section
           title="빠르게 추가하기"
-          description="필요한 품목을 목록에 추가하세요."
+          description="필요한 재료를 목록에 추가하세요."
         >
           <Card>
             <div className="shopping-add">
@@ -757,7 +1000,7 @@ function ShoppingPage({
                 }
                 onKeyDown={handleKeyDown}
                 placeholder="예: 우유"
-                aria-label="구매할 품목"
+                aria-label="구매할 재료"
               />
 
               <Button
@@ -770,7 +1013,7 @@ function ShoppingPage({
 
             {isShoppingEmpty ? (
               <p className="shopping-empty-hint">
-                품목을 추가하면 목록과 진행률이 표시돼요.
+                재료를 추가하면 목록과 진행률이 표시돼요.
               </p>
             ) : null}
           </Card>
@@ -779,61 +1022,78 @@ function ShoppingPage({
         {!isShoppingEmpty ? (
           <>
             <Section
-              title="구매할 품목"
+              title="구매할 재료"
               description={`${remainingDisplayItems.length}개 남았어요`}
             >
               <Card>
                 {remainingDisplayItems.length === 0 ? (
                   <EmptyState
                     icon={<ShoppingCart />}
-                    title="모든 품목을 구매했어요."
-                    description="구매한 품목은 아래에서 확인할 수 있어요."
+                    title="모든 재료를 구매했어요."
+                    description="구매한 재료는 장바구니에 담겨 있어요."
                   />
                 ) : (
-                  <div className="shopping-groups">
-                    {remainingCategoryGroups.map((group) => (
-                      <details
-                        key={group.category}
-                        className="shopping-group"
-                        open
-                      >
-                        <summary>
-                          <span>{group.category}</span>
-                          <span className="shopping-group__count">
-                            {group.items.length}개
-                          </span>
-                          <ChevronDown
-                            className="shopping-group__chevron"
-                            size={20}
-                            strokeWidth={2.2}
-                            aria-hidden="true"
-                          />
-                        </summary>
+                  <div className="shopping-source-groups">
+                    {remainingSourceGroups.map(
+                      (sourceGroup) => (
+                        <section
+                          key={sourceGroup.key}
+                          className="shopping-source-group"
+                        >
+                          <h3>{sourceGroup.title}</h3>
+                          <div className="shopping-groups">
+                            {sourceGroup.categoryGroups.map(
+                              (group) => (
+                                <details
+                                  key={`${sourceGroup.key}-${group.category}`}
+                                  className="shopping-group"
+                                  open
+                                >
+                                  <summary>
+                                    <span>
+                                      {group.category}
+                                    </span>
+                                    <span className="shopping-group__count">
+                                      {group.items.length}개
+                                    </span>
+                                    <ChevronDown
+                                      className="shopping-group__chevron"
+                                      size={20}
+                                      strokeWidth={2.2}
+                                      aria-hidden="true"
+                                    />
+                                  </summary>
 
-                        <ul className="shopping-list">
-                          {group.items.map((item) => (
-                            <ShoppingItemRow
-                              key={item.key}
-                              item={item}
-                              isTransitioning={
-                                transitioningItemKeys.has(
-                                  item.key,
-                                )
-                              }
-                              onToggle={() =>
-                                handleToggleItem(item)
-                              }
-                              onDelete={() =>
-                                handleDeleteItem(item)
-                              }
-                              onOpenPurchase={() =>
-                                handleOpenPurchase(item)
-                              }
-                            />
-                          ))}
-                        </ul>
-                      </details>
-                    ))}
+                                  <ul className="shopping-list">
+                                    {group.items.map(
+                                      (item) => (
+                                        <ShoppingItemRow
+                                          key={item.key}
+                                          item={item}
+                                          isTransitioning={transitioningItemKeys.has(
+                                            item.key,
+                                          )}
+                                          onToggle={() =>
+                                            handleToggleItem(
+                                              item,
+                                            )
+                                          }
+                                          onOpenPurchase={() =>
+                                            handleOpenPurchase(
+                                              item,
+                                            )
+                                          }
+                                        />
+                                      ),
+                                    )}
+                                  </ul>
+                                </details>
+                              ),
+                            )}
+                          </div>
+                        </section>
+                      ),
+                    )}
                   </div>
                 )}
               </Card>
@@ -866,7 +1126,7 @@ function ShoppingPage({
                     }
                     onClick={handleOpenInventoryApply}
                   >
-                    구매한 품목을 냉장고에 넣기
+                    구매한 재료를 냉장고에 넣기
                   </Button>
 
                   {inventoryApplyMessage ? (
@@ -879,8 +1139,8 @@ function ShoppingPage({
                 {completedDisplayItems.length === 0 ? (
                   <EmptyState
                     icon={<ShoppingBasket />}
-                    title="아직 구매 완료한 품목이 없어요."
-                    description="품목을 체크하면 이곳으로 이동해요."
+                    title="아직 구매한 재료가 없어요."
+                    description="재료를 체크하면 이곳으로 이동해요."
                   />
                 ) : (
                   <ul className="shopping-list">
@@ -896,9 +1156,6 @@ function ShoppingPage({
                         onToggle={() =>
                           handleToggleItem(item)
                         }
-                        onDelete={() =>
-                          handleDeleteItem(item)
-                        }
                         onOpenPurchase={() =>
                           handleOpenPurchase(item)
                         }
@@ -911,6 +1168,59 @@ function ShoppingPage({
           </>
         ) : null}
       </main>
+
+      <BottomSheet
+        open={reminderActionsModal.isOpen}
+        title={
+          reminderActionsModal.value
+            ? `${reminderActionsModal.value.name} 추가 동작`
+            : '다시 살 재료 추가 동작'
+        }
+        description="구매 상태를 기록하거나 이번 목록에서 정리할 수 있어요."
+        onClose={reminderActionsModal.closeModal}
+      >
+        {reminderActionsModal.value ? (
+          <div className="shopping-reminder-actions-sheet">
+            <Button
+              fullWidth
+              onClick={() =>
+                reminderActionsModal.closeModalAndThen(
+                  () =>
+                    handleOpenPurchase(
+                      reminderActionsModal.value!,
+                    ),
+                )
+              }
+            >
+              구매 완료
+            </Button>
+            <Button
+              variant="secondary"
+              fullWidth
+              onClick={() => {
+                handleExcludeReminderItem(
+                  reminderActionsModal.value!,
+                )
+                reminderActionsModal.closeModal()
+              }}
+            >
+              이번 목록에서 제외
+            </Button>
+            <Button
+              variant="danger"
+              fullWidth
+              onClick={() => {
+                handleDeleteReminderItem(
+                  reminderActionsModal.value!,
+                )
+                reminderActionsModal.closeModal()
+              }}
+            >
+              삭제
+            </Button>
+          </div>
+        ) : null}
+      </BottomSheet>
 
       <BottomSheet
         open={purchaseModal.isOpen}
@@ -943,8 +1253,11 @@ function ShoppingPage({
             <div className="shopping-purchase-sheet__required">
               <span>필요한 수량</span>
               <strong>
-                {selectedPurchaseItem.requiredQuantity}
-                {selectedPurchaseUnit}
+                {formatShoppingQuantity(
+                  selectedPurchaseItem.name,
+                  selectedPurchaseItem.requiredQuantity,
+                  selectedPurchaseUnit,
+                )}
               </strong>
             </div>
 
@@ -1012,20 +1325,33 @@ function ShoppingPage({
               aria-live="polite"
             >
               <strong>
-                총 {effectivePurchasedQuantity}
-                {selectedPurchaseUnit}를 구매했어요.
+                총{' '}
+                {formatShoppingQuantity(
+                  selectedPurchaseItem.name,
+                  effectivePurchasedQuantity,
+                  selectedPurchaseUnit,
+                )}
+                를 구매했어요.
               </strong>
               {purchaseRemainingQuantity > 0 ? (
                 <p>
-                  {purchaseRemainingQuantity}
-                  {selectedPurchaseUnit} 더 필요해요.
+                  {formatShoppingQuantity(
+                    selectedPurchaseItem.name,
+                    purchaseRemainingQuantity,
+                    selectedPurchaseUnit,
+                  )}{' '}
+                  더 필요해요.
                 </p>
               ) : null}
               {purchaseSurplusQuantity > 0 ? (
                 <p>
-                  식단 사용 후 {purchaseSurplusQuantity}
-                  {selectedPurchaseUnit}가 남을
-                  예정이에요.
+                  식단 사용 후{' '}
+                  {formatShoppingQuantity(
+                    selectedPurchaseItem.name,
+                    purchaseSurplusQuantity,
+                    selectedPurchaseUnit,
+                  )}
+                  가 남을 예정이에요.
                 </p>
               ) : null}
               {selectedPurchaseItem
@@ -1045,19 +1371,36 @@ function ShoppingPage({
             {selectedPurchaseItem
               .purchasedTotalQuantity === 0 &&
             effectivePurchasedQuantity === 0 ? (
+              <>
                 <Button
                   variant="danger"
                   fullWidth
                   onClick={handleMarkNotPurchased}
                 >
-                  이번에 못 삼
+                  이번에는 못 샀어요
                 </Button>
+                <p className="shopping-purchase-sheet__not-purchased-note">
+                  다음 장보기에 다시 알려드려요.
+                </p>
+              </>
               ) : purchaseRemainingQuantity > 0 ? (
                 <p className="shopping-purchase-sheet__partial-note">
                   부분 구매한 나머지 수량은 다음 장보기
                   목록에 그대로 남아요.
                 </p>
               ) : null}
+            <Button
+              variant="ghost"
+              fullWidth
+              onClick={() => {
+                handleDeleteItem(
+                  selectedPurchaseItem,
+                )
+                purchaseModal.closeModal()
+              }}
+            >
+              이 재료 삭제
+            </Button>
           </div>
         ) : null}
       </BottomSheet>
@@ -1066,19 +1409,23 @@ function ShoppingPage({
         open={inventoryModal.isOpen}
         title={
           inventoryApplyStep === 'navigate' &&
-          outstandingItemCountAfterApply > 0
-            ? `아직 구매하지 못한 품목이 ${outstandingItemCountAfterApply}개 있어요.`
+          inventoryApplySummary.reminderItemCount +
+            inventoryApplySummary.plannedItemCount >
+            0
+            ? '냉장고 반영 결과를 확인해 주세요.'
             : inventoryApplyStep === 'navigate'
               ? '구매한 재료를 냉장고에 넣었어요.'
               : '구매한 재료를 냉장고에 추가할까요?'
         }
         description={
           inventoryApplyStep === 'navigate' &&
-          outstandingItemCountAfterApply > 0
-            ? '다음 장보기에 다시 알려드릴게요.'
+          inventoryApplySummary.reminderItemCount +
+            inventoryApplySummary.plannedItemCount >
+            0
+            ? '이번에 못 산 재료만 다음 장보기에 다시 알려드릴게요.'
             : inventoryApplyStep === 'navigate'
               ? '냉장고에서 반영된 재료를 확인할 수 있어요.'
-              : '실제 구매량만 반영하며 같은 품목과 단위는 합쳐져요.'
+              : '실제 구매량만 반영하며 같은 재료와 단위는 합쳐져요.'
         }
         onClose={handleCloseInventoryModal}
         footer={
@@ -1126,7 +1473,7 @@ function ShoppingPage({
                 {isApplyingInventory
                   ? '냉장고에 넣는 중'
                   : isInventoryItemSelectionOpen
-                    ? '선택한 품목 추가'
+                    ? '선택한 재료 추가'
                     : '모두 추가'}
               </Button>
             </>
@@ -1139,17 +1486,25 @@ function ShoppingPage({
             role="status"
           >
             <p>{inventoryApplyMessage}</p>
-            {outstandingItemCountAfterApply > 0 ? (
-              <p>
-                구매 예정이거나 이번에 못 산 품목은
-                장보기 목록에 그대로 남아 있어요.
-              </p>
-            ) : null}
+            <ul>
+              <li>
+                냉장고에 넣은 재료:{' '}
+                {inventoryApplySummary.appliedItemCount}개
+              </li>
+              <li>
+                이번에 못 산 재료:{' '}
+                {inventoryApplySummary.reminderItemCount}개
+              </li>
+              <li>
+                아직 구매 예정인 재료:{' '}
+                {inventoryApplySummary.plannedItemCount}개
+              </li>
+            </ul>
           </div>
         ) : (
           <div className="shopping-inventory-sheet">
             <p>
-              모두 추가하거나 품목별로 확인할 수
+              모두 추가하거나 재료별로 확인할 수
               있어요.
             </p>
             {!isInventoryItemSelectionOpen ? (
@@ -1160,7 +1515,7 @@ function ShoppingPage({
                   setIsInventoryItemSelectionOpen(true)
                 }
               >
-                품목별 확인
+                재료별 확인
               </Button>
             ) : (
               <ul>
@@ -1211,10 +1566,10 @@ function ShoppingPage({
       {isQuickAddVisible ? (
         <Button
           className="shopping-quick-add"
-          aria-label="품목 입력으로 이동"
+          aria-label="재료 입력으로 이동"
           onClick={handleQuickAdd}
         >
-          + 품목 추가
+          + 재료 추가
         </Button>
       ) : null}
     </>

@@ -26,6 +26,24 @@ Variables**에 같은 이름으로 설정한 뒤 다시 배포합니다.
 때만 `HOMEOS_AI_MOCK=true`를 사용할 수 있으며 production
 환경에서는 무시됩니다.
 
+## 의견 수신 설정
+
+`/api/feedback`은 검증을 통과한 의견을 운영자가 관리하는
+HTTPS Webhook으로 전달합니다. 새 외부 서비스나 클라이언트
+비밀값은 추가하지 않으며, 다음 서버 환경변수가 없으면
+피드백 화면은 안전한 전송 실패 안내를 표시합니다.
+
+```text
+FEEDBACK_WEBHOOK_URL=https://operator-owned.example/webhook
+FEEDBACK_WEBHOOK_TOKEN=
+```
+
+토큰은 선택 사항이며 설정한 경우에만 `Authorization:
+Bearer` 헤더로 서버에서 전달합니다. 두 값 모두 `VITE_`
+접두사를 사용하지 않고 Vercel **Settings → Environment
+Variables**에만 설정합니다. 의견 API는 식단, 냉장고,
+장보기 목록, LocalStorage 전체를 읽거나 전송하지 않습니다.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

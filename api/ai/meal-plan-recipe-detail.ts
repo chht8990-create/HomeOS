@@ -167,7 +167,11 @@ function buildPrompt(
       '주재료, 양념, 물 또는 육수, 고명까지 빠짐없이 정확한 수량과 단위를 쓰세요.',
       '필수 ingredients의 group은 main, seasoning, broth, garnish 중 하나이고 optional은 false입니다.',
       '선택 재료는 optionalIngredients에 group optional, optional true로 쓰세요.',
-      '물과 육수는 반드시 ml 단위로 쓰세요.',
+      '물·육수·우유는 ml 또는 컵 단위로 쓰세요.',
+      '밥은 공기, 양파·감자·당근·달걀·고추·애호박은 개, 대파는 대, 두부는 모, 마늘은 쪽, 김·식빵은 장, 라면은 봉지, 참치는 캔처럼 한국 가정의 생활 단위를 우선 사용하세요.',
+      '고기·생선·새우·오징어·밀가루·버터·치즈·면·떡은 g, 간장·식용유·식초·고춧가루는 큰술, 참기름·설탕·다진 마늘은 작은술 또는 큰술을 사용하세요.',
+      '소금은 한 꼬집 또는 약간, 후추·깨·파슬리·허브는 약간으로 쓰세요.',
+      '개수와 생활 단위는 1/2 또는 자연수만 사용하고 1 1/2개, 0.83개, 1.25개 같은 값을 만들지 마세요.',
       '서로 다른 실제 조리 단계 8~12개를 쓰고 단계별 제목, 시간, 불 세기, 눈으로 확인할 완성 기준을 포함하세요.',
       'ingredientRefs에는 재료 목록에 실제로 적은 이름만 정확히 쓰세요.',
       '간 조절, 실패 방지, 보관, 재가열, 대체 재료, 남은 음식 활용과 곁들이기를 모두 포함하세요.',
@@ -181,7 +185,7 @@ function mapUpstreamError(status: number) {
   if (status === 400) {
     return {
       status: 502,
-      code: 'AI_RESPONSE_INVALID',
+      code: 'RECIPE_GENERATION_FAILED',
       message:
         '상세 레시피 결과를 안전하게 만들지 못했어요. 다시 시도해 주세요.',
     }
@@ -190,7 +194,7 @@ function mapUpstreamError(status: number) {
   if (status === 401 || status === 403) {
     return {
       status,
-      code: 'AI_NOT_CONFIGURED',
+      code: 'API_REQUEST_FAILED',
       message:
         '현재 AI 상세 레시피 설정을 확인하고 있어요.',
     }
@@ -199,7 +203,7 @@ function mapUpstreamError(status: number) {
   if (status === 429) {
     return {
       status,
-      code: 'AI_LIMIT_REACHED',
+      code: 'OPENAI_RATE_LIMIT',
       message:
         'AI 사용 한도에 도달했어요. 잠시 후 다시 시도해 주세요.',
     }
@@ -207,7 +211,7 @@ function mapUpstreamError(status: number) {
 
   return {
     status: status >= 500 ? 503 : 502,
-    code: 'AI_SERVICE_UNAVAILABLE',
+    code: 'API_REQUEST_FAILED',
     message:
       'AI 서비스가 잠시 불안정해요. 이 메뉴에서 다시 시도해 주세요.',
   }
@@ -424,6 +428,8 @@ async function requestOpenAi(
       console.error(
         '[today-table-ai-meal-plan-detail-upstream]',
         JSON.stringify({
+          traceId: request.traceId ?? 'untracked',
+          stage: 'RECIPE_DETAIL_GENERATION',
           status: response.status,
           type: sanitizeError(upstreamError.type),
           code: sanitizeError(upstreamError.code),
@@ -440,6 +446,8 @@ async function requestOpenAi(
       console.info(
         '[today-table-ai-meal-plan-detail]',
         JSON.stringify({
+          traceId: request.traceId ?? 'untracked',
+          stage: 'RECIPE_DETAIL_GENERATION',
           model,
           inputTokens: null,
           outputTokens: null,
@@ -457,7 +465,7 @@ async function requestOpenAi(
 
     if (responseText.length > MAX_RESPONSE_BYTES) {
       return errorResponse(
-        'AI_RESPONSE_INVALID',
+        'OPENAI_RESPONSE_INVALID',
         '상세 레시피 결과가 너무 커서 읽지 못했어요.',
         502,
       )
@@ -470,7 +478,7 @@ async function requestOpenAi(
       usage = readUsage(rawResponse)
     } catch {
       return errorResponse(
-        'AI_RESPONSE_INVALID',
+        'JSON_PARSE_FAILED',
         '상세 레시피 결과를 안전하게 읽지 못했어요.',
         502,
       )
@@ -481,7 +489,7 @@ async function requestOpenAi(
 
     if (!structuredText) {
       return errorResponse(
-        'AI_RESPONSE_INVALID',
+        'OPENAI_RESPONSE_INVALID',
         '상세 레시피 결과가 비어 있어요.',
         502,
       )
@@ -493,7 +501,7 @@ async function requestOpenAi(
       output = JSON.parse(structuredText)
     } catch {
       return errorResponse(
-        'AI_RESPONSE_INVALID',
+        'JSON_PARSE_FAILED',
         '상세 레시피 결과 형식이 올바르지 않아요.',
         502,
       )
@@ -507,7 +515,7 @@ async function requestOpenAi(
 
     if (!parsed) {
       return errorResponse(
-        'AI_RESPONSE_INVALID',
+        'SCHEMA_VALIDATION_FAILED',
         '상세 레시피가 안전 기준을 충족하지 못했어요. 다시 시도해 주세요.',
         502,
       )
@@ -525,6 +533,8 @@ async function requestOpenAi(
     console.info(
       '[today-table-ai-meal-plan-detail]',
       JSON.stringify({
+        traceId: request.traceId ?? 'untracked',
+        stage: 'RECIPE_DETAIL_GENERATION',
         model,
         inputTokens: usage?.inputTokens ?? null,
         outputTokens:
@@ -540,6 +550,8 @@ async function requestOpenAi(
     console.info(
       '[today-table-ai-meal-plan-detail]',
       JSON.stringify({
+        traceId: request.traceId ?? 'untracked',
+        stage: 'RECIPE_DETAIL_GENERATION',
         model,
         inputTokens: usage?.inputTokens ?? null,
         outputTokens:
@@ -553,12 +565,12 @@ async function requestOpenAi(
     return error instanceof DOMException &&
       error.name === 'AbortError'
       ? errorResponse(
-          'AI_RECIPE_DETAIL_TIMEOUT',
+          'OPENAI_TIMEOUT',
           '상세 레시피 생성 시간이 길어졌어요. 식단은 그대로 두고 이 메뉴에서 다시 시도해 주세요.',
           504,
         )
       : errorResponse(
-          'AI_NETWORK_ERROR',
+          'API_REQUEST_FAILED',
           'AI 상세 레시피에 연결하지 못했어요. 이 메뉴에서 다시 시도해 주세요.',
           502,
         )
@@ -619,7 +631,7 @@ export async function handleAiMealPlanRecipeDetail(
     body = JSON.parse(requestText)
   } catch {
     return errorResponse(
-      'INVALID_REQUEST',
+      'INPUT_INVALID',
       '요청 JSON이 올바르지 않습니다.',
       400,
     )
@@ -630,7 +642,7 @@ export async function handleAiMealPlanRecipeDetail(
 
   if (!validation.ok) {
     return errorResponse(
-      validation.code,
+      'INPUT_INVALID',
       validation.message,
       400,
     )

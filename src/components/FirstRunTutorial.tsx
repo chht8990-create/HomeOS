@@ -12,12 +12,14 @@ type FirstRunTutorialProps = {
   open: boolean
   onClose: () => void
   onComplete: (doNotShowAgain: boolean) => void
+  onOpenGuide: (doNotShowAgain: boolean) => void
 }
 
 function FirstRunTutorial({
   open,
   onClose,
   onComplete,
+  onOpenGuide,
 }: FirstRunTutorialProps) {
   const [pageIndex, setPageIndex] = useState(0)
   const [doNotShowAgain, setDoNotShowAgain] =
@@ -84,14 +86,24 @@ function FirstRunTutorial({
             ) : null}
 
             {isLastPage ? (
-              <Button
-                className="first-run-tutorial__start-button"
-                onClick={() =>
-                  complete()
-                }
-              >
-                오늘식탁 시작하기
-              </Button>
+              <>
+                <Button
+                  variant="secondary"
+                  onClick={() =>
+                    onOpenGuide(doNotShowAgain)
+                  }
+                >
+                  사용 순서 자세히 보기
+                </Button>
+                <Button
+                  className="first-run-tutorial__start-button"
+                  onClick={() =>
+                    complete()
+                  }
+                >
+                  오늘식탁 시작하기
+                </Button>
+              </>
             ) : (
               <Button
                 onClick={() =>
@@ -121,7 +133,11 @@ function FirstRunTutorial({
         </div>
         {isLastPage ? (
           <fieldset className="first-run-tutorial__tools">
-            <legend>집에 있는 계량도구</legend>
+            <legend>집에서 사용할 수 있는 계량도구</legend>
+            <p>
+              선택한 도구에 맞춰 레시피 계량법을
+              보여드려요.
+            </p>
             {measurementToolOptions
               .filter((option) =>
                 tutorialMeasurementTools.includes(

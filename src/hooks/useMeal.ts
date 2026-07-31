@@ -133,6 +133,10 @@ function useMeal({ date, mealType }: UseMealOptions) {
             detail: {
               sourceId: meal.id,
               ingredients: recipe.ingredients,
+              sourceRecipeId: recipe.id,
+              sourceRecipeName: recipe.name,
+              sourceMealDate: meal.date,
+              sourceMealTime: meal.type,
             },
           },
         ),

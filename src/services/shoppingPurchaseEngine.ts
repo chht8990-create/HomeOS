@@ -85,6 +85,14 @@ export function normalizeStoredShoppingItem(
       stored.source === 'meal'
         ? 'meal'
         : 'manual',
+    sourceKind:
+      stored.sourceKind === 'meal_plan' ||
+      stored.sourceKind === 'recipe' ||
+      stored.sourceKind === 'reminder_restored'
+        ? stored.sourceKind
+        : stored.source === 'meal'
+          ? 'meal_plan'
+          : 'manual',
     createdAt:
       typeof stored.createdAt === 'string'
         ? stored.createdAt
@@ -184,9 +192,7 @@ export function normalizeShoppingItem(
     remainingPurchaseQuantity,
     surplusQuantity,
     reminderStatus:
-      purchaseStatus !== 'completed' &&
-      (purchaseStatus === 'not-purchased' ||
-        item.reminderStatus === 'pending')
+      purchaseStatus === 'not-purchased'
         ? 'pending'
         : 'none',
     inventoryAppliedQuantity:
@@ -200,7 +206,9 @@ export function getShoppingReminderItems(
   return items
     .map(normalizeShoppingItem)
     .filter(
-      (item) => item.reminderStatus === 'pending',
+      (item) =>
+        item.purchaseStatus === 'not-purchased' &&
+        item.reminderStatus === 'pending',
     )
 }
 
@@ -212,6 +220,38 @@ export function shouldShowShoppingReminder(
     reminderItemCount > 0 &&
     !isDismissedForCurrentVisit
   )
+}
+
+export type ShoppingReminderPreview<T> = {
+  visibleItems: T[]
+  hiddenCount: number
+  canToggle: boolean
+  isExpanded: boolean
+}
+
+export function createShoppingReminderPreview<T>(
+  items: T[],
+  expanded: boolean,
+  visibleLimit = 3,
+): ShoppingReminderPreview<T> {
+  const safeLimit = Math.max(
+    1,
+    Math.floor(visibleLimit),
+  )
+  const canToggle = items.length > safeLimit
+  const isExpanded = canToggle && expanded
+  const visibleItems = isExpanded
+    ? [...items]
+    : items.slice(0, safeLimit)
+
+  return {
+    visibleItems,
+    hiddenCount: isExpanded
+      ? 0
+      : Math.max(0, items.length - visibleItems.length),
+    canToggle,
+    isExpanded,
+  }
 }
 
 export function deleteShoppingItems(
@@ -244,6 +284,11 @@ export function markShoppingItemsForReminder(
 
     return {
       ...normalizedItem,
+      purchaseStatus: 'not-purchased' as const,
+      purchasedQuantity: 0,
+      purchasedTotalQuantity: 0,
+      remainingPurchaseQuantity:
+        readRequiredShoppingQuantity(normalizedItem),
       reminderStatus: 'pending' as const,
       updatedAt: now,
     }
@@ -567,6 +612,10 @@ export function restoreShoppingReminderItems(
       requiredQuantity: remainingPurchaseQuantity,
       surplusQuantity: 0,
       reminderStatus: 'none' as const,
+      sourceKind:
+        normalizedItem.source === 'meal'
+          ? ('reminder_restored' as const)
+          : normalizedItem.sourceKind,
       packageQuantity: undefined,
       purchasedPackageCount: undefined,
       inventoryAppliedQuantity: 0,

@@ -1,6 +1,8 @@
 import type { PageName } from '../components/BottomNavigation'
 
 const APP_HISTORY_MARKER = 'today-table-navigation'
+const PWA_EXIT_GUARD_KEY =
+  '__todayTablePwaExitGuard'
 
 export type AppOverlay =
   | 'firstRunTutorial'
@@ -13,6 +15,7 @@ export type AppNavigationState = {
   recipeId: string | null
   plannerRecipeName: string | null
   openAiTrial: boolean
+  showInventoryRecommendations: boolean
   overlay: AppOverlay | null
 }
 
@@ -34,6 +37,15 @@ const pageNames: PageName[] = [
   'recipes',
   'settings',
   'guide',
+  'feedback',
+]
+
+const topLevelPageNames: PageName[] = [
+  'today',
+  'recipes',
+  'shopping',
+  'inventory',
+  'settings',
 ]
 
 function isPageName(value: unknown): value is PageName {
@@ -59,6 +71,7 @@ export function createNavigationState(
     recipeId: null,
     plannerRecipeName: null,
     openAiTrial: false,
+    showInventoryRecommendations: false,
     overlay: null,
     ...overrides,
   }
@@ -84,6 +97,8 @@ export function isAppNavigationState(
     (candidate.plannerRecipeName === null ||
       typeof candidate.plannerRecipeName === 'string') &&
     typeof candidate.openAiTrial === 'boolean' &&
+    typeof candidate.showInventoryRecommendations ===
+      'boolean' &&
     (candidate.overlay === null ||
       candidate.overlay === 'firstRunTutorial' ||
       candidate.overlay === 'mealPlanWelcome')
@@ -117,6 +132,9 @@ export function readNavigationState(
     openAiTrial:
       page === 'mealPlan' &&
       params.get('aiTrial') === '1',
+    showInventoryRecommendations:
+      page === 'recipes' &&
+      params.get('fromInventory') === '1',
   })
 }
 
@@ -130,6 +148,7 @@ export function createNavigationUrl(
   url.searchParams.delete('recipe')
   url.searchParams.delete('plannerRecipe')
   url.searchParams.delete('aiTrial')
+  url.searchParams.delete('fromInventory')
 
   if (state.page !== 'today') {
     url.searchParams.set('page', state.page)
@@ -159,6 +178,13 @@ export function createNavigationUrl(
     url.searchParams.set('aiTrial', '1')
   }
 
+  if (
+    state.page === 'recipes' &&
+    state.showInventoryRecommendations
+  ) {
+    url.searchParams.set('fromInventory', '1')
+  }
+
   return `${url.pathname}${url.search}${url.hash}`
 }
 
@@ -172,7 +198,54 @@ export function isSameNavigationTarget(
     current.plannerRecipeName ===
       next.plannerRecipeName &&
     current.openAiTrial === next.openAiTrial &&
+    current.showInventoryRecommendations ===
+      next.showInventoryRecommendations &&
     current.overlay === next.overlay
+  )
+}
+
+export function isTopLevelNavigationState(
+  state: AppNavigationState,
+) {
+  return (
+    topLevelPageNames.includes(state.page) &&
+    state.recipeId === null &&
+    state.plannerRecipeName === null &&
+    !state.openAiTrial &&
+    !state.showInventoryRecommendations &&
+    state.overlay === null
+  )
+}
+
+export function createPwaExitGuardState(
+  state: AppNavigationState,
+) {
+  return {
+    ...state,
+    [PWA_EXIT_GUARD_KEY]: true,
+  }
+}
+
+export function isPwaExitGuardState(
+  state: unknown,
+) {
+  return (
+    typeof state === 'object' &&
+    state !== null &&
+    PWA_EXIT_GUARD_KEY in state &&
+    (state as Record<string, unknown>)[
+      PWA_EXIT_GUARD_KEY
+    ] === true
+  )
+}
+
+export function shouldUsePwaBackExit(
+  displayModeStandalone: boolean,
+  navigatorStandalone = false,
+) {
+  return (
+    displayModeStandalone ||
+    navigatorStandalone
   )
 }
 
@@ -185,10 +258,18 @@ export function planTopLevelNavigation(
     current.recipeId === null &&
     current.plannerRecipeName === null &&
     !current.openAiTrial &&
+    !current.showInventoryRecommendations &&
     current.overlay === null
 
   if (isCurrentTopLevelTarget) {
     return { kind: 'none' }
+  }
+
+  if (
+    isTopLevelNavigationState(current) &&
+    topLevelPageNames.includes(targetPage)
+  ) {
+    return { kind: 'replace' }
   }
 
   if (targetPage === 'today') {
@@ -205,6 +286,13 @@ export function planTopLevelNavigation(
     current.index === 0
   ) {
     return { kind: 'push' }
+  }
+
+  if (current.index > 0) {
+    return {
+      kind: 'back-and-replace',
+      delta: -current.index,
+    }
   }
 
   if (current.index <= 1) {
