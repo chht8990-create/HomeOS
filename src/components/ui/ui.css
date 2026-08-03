@@ -3047,9 +3047,35 @@
   line-height: var(--line-height-body);
 }
 
+.ai-recommendation-steps > strong {
+  display: block;
+  padding-top: var(--space-3);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+}
+
+.ai-recommendation-steps li {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.ai-recommendation-steps li > strong {
+  color: var(--color-text);
+}
+
+.ai-recommendation-steps li > span,
+.ai-recommendation-steps li > small {
+  display: block;
+}
+
+.ai-recommendation-steps li > small {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
 .ai-recommendation-card__actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-2);
 }
 
@@ -3228,6 +3254,33 @@
 .settings-help-card {
   display: grid;
   gap: var(--space-4);
+}
+
+.settings-support-contact,
+.feedback-form__support {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-caption);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.settings-support-contact {
+  text-align: center;
+}
+
+.settings-support-contact a,
+.feedback-form__support a {
+  color: var(--color-primary-strong);
+  font-weight: var(--font-weight-semibold);
+  text-underline-offset: 3px;
+}
+
+.settings-support-contact a:focus-visible,
+.feedback-form__support a:focus-visible {
+  border-radius: var(--radius-xs);
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 3px;
 }
 
 .settings-measurement-card__heading {

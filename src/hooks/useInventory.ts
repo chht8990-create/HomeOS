@@ -1,4 +1,9 @@
 import { useEffect, useState } from 'react'
+import {
+  isValidInventoryQuantity,
+  parseStoredInventoryItems,
+  serializeInventoryItems,
+} from '../services/inventoryQuantityEngine'
 import type { InventoryItem } from '../types/inventory'
 
 const STORAGE_KEY = 'homeos.inventory'
@@ -11,14 +16,13 @@ export function readInventoryItems(): InventoryItem[] {
     return []
   }
 
-  try {
-    const parsed = JSON.parse(stored)
+  const parsed = parseStoredInventoryItems(stored)
 
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
+  if (parsed.length === 0 && stored !== '[]') {
     window.localStorage.removeItem(STORAGE_KEY)
-    return []
   }
+
+  return parsed
 }
 
 function createInventoryId() {
@@ -34,7 +38,7 @@ export function writeInventoryItems(
 ) {
   window.localStorage.setItem(
     STORAGE_KEY,
-    JSON.stringify(items),
+    serializeInventoryItems(items),
   )
   window.dispatchEvent(new Event(CHANGE_EVENT))
 }
@@ -76,7 +80,12 @@ function useInventory() {
   ) {
     const trimmedName = name.trim()
 
-    if (!trimmedName) return
+    if (
+      !trimmedName ||
+      !isValidInventoryQuantity(quantity)
+    ) {
+      return
+    }
 
     const now = new Date().toISOString()
 
@@ -105,8 +114,7 @@ function useInventory() {
 
     if (
       !trimmedName ||
-      !Number.isFinite(quantity) ||
-      quantity <= 0
+      !isValidInventoryQuantity(quantity)
     ) {
       return
     }

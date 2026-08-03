@@ -42,10 +42,14 @@ export function createPlannerShoppingChange(
   const previousSourceId = previousMealPlanId
     ? createPlannerShoppingSourceId(previousMealPlanId)
     : undefined
-  const recipe = findRecipeByMealName(
-    savedMealPlan.name,
-    recipes,
-  )
+  const recipe =
+    (savedMealPlan.recipeId
+      ? recipes.find(
+          (candidate) =>
+            candidate.id === savedMealPlan.recipeId,
+        )
+      : undefined) ??
+    findRecipeByMealName(savedMealPlan.name, recipes)
 
   return {
     sourceId,

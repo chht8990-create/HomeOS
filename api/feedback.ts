@@ -4,6 +4,7 @@ import {
   validateFeedbackPayload,
 } from '../src/services/feedbackEngine.js'
 import type { FeedbackPayload } from '../src/types/feedback.js'
+import { getBusinessRepository } from '../src/server/businessRuntime.js'
 
 const MAX_REQUEST_BYTES = 16_000
 const DELIVERY_TIMEOUT_MS = 8_000
@@ -379,7 +380,46 @@ export async function handleFeedback(
 }
 
 export default {
-  fetch(request: Request) {
-    return handleFeedback(request, process.env)
+  async fetch(request: Request) {
+    let category = 'unknown'
+
+    try {
+      const body = (await request.clone().json()) as {
+        category?: unknown
+      }
+
+      if (typeof body.category === 'string') {
+        category = body.category.slice(0, 50)
+      }
+    } catch {
+      // Validation response remains owned by handleFeedback.
+    }
+
+    const response = await handleFeedback(
+      request,
+      process.env,
+    )
+    const business = getBusinessRepository(process.env)
+
+    if (business) {
+      try {
+        await business.recordFeedbackEvent({
+          id: `feedback_event_${crypto.randomUUID()}`,
+          category,
+          success: response.ok,
+          createdAt: new Date().toISOString(),
+        })
+      } catch {
+        console.warn(
+          '[today-table-feedback-metric]',
+          JSON.stringify({
+            code: 'FEEDBACK_METRIC_STORE_FAILED',
+            success: response.ok,
+          }),
+        )
+      }
+    }
+
+    return response
   },
 }

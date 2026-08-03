@@ -8,6 +8,10 @@ import Section from '../components/ui/Section'
 import StyledSelect from '../components/ui/StyledSelect'
 import useInventory from '../hooks/useInventory'
 import { getInventoryListDisplayName } from '../services/inventoryPresentationEngine'
+import {
+  formatInventoryQuantity,
+  parseInventoryQuantity,
+} from '../services/inventoryQuantityEngine'
 import type {
   InventoryItem,
   InventoryLocation,
@@ -51,12 +55,11 @@ function InventoryPage({
   }
 
   function handleSaveItem() {
-    const parsedQuantity = Number(quantity)
+    const parsedQuantity = parseInventoryQuantity(quantity)
 
     if (
       !name.trim() ||
-      !Number.isFinite(parsedQuantity) ||
-      parsedQuantity <= 0
+      parsedQuantity === null
     ) {
       return
     }
@@ -145,7 +148,9 @@ function InventoryPage({
           description={
             editingId
               ? '이름, 수량, 단위, 보관 위치를 수정하세요.'
-              : '냉장고나 찬장에 있는 재료를 추가하세요.'
+              : items.length === 0
+                ? '냉장고에 재료를 등록하면 AI가 더 정확하게 추천합니다.'
+                : '냉장고나 찬장에 있는 재료를 추가하세요.'
           }
         >
           <Card>
@@ -166,8 +171,9 @@ function InventoryPage({
                   <span>수량</span>
                   <input
                     type="number"
-                    min="0.1"
-                    step="0.1"
+                    min="0"
+                    step="any"
+                    inputMode="decimal"
                     value={quantity}
                     onChange={(event) => setQuantity(event.target.value)}
                   />
@@ -214,7 +220,8 @@ function InventoryPage({
                     onClick={handleSaveItem}
                     disabled={
                       !name.trim() ||
-                      Number(quantity) <= 0
+                      parseInventoryQuantity(quantity) ===
+                        null
                     }
                   >
                     수정 내용 저장
@@ -226,7 +233,7 @@ function InventoryPage({
                   onClick={handleSaveItem}
                   disabled={
                     !name.trim() ||
-                    Number(quantity) <= 0
+                    parseInventoryQuantity(quantity) === null
                   }
                 >
                   재료 추가
@@ -265,7 +272,10 @@ function InventoryPage({
                           {locationLabels[item.location]}
                         </span>
                       </div>
-
+                      <p className="inventory-item__quantity ui-number">
+                        {formatInventoryQuantity(item.quantity)}
+                        {item.unit.trim()}
+                      </p>
                     </div>
 
                     <div className="inventory-item__actions">

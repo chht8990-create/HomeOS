@@ -15,7 +15,9 @@ import {
   Trash2,
   Utensils,
 } from 'lucide-react'
-import RecipeRecommendationBlock from '../blocks/RecipeRecommendationBlock'
+import RecipeRecommendationBlock, {
+  type RecipeSelection,
+} from '../blocks/RecipeRecommendationBlock'
 import type { PageName } from '../components/BottomNavigation'
 import RecipeSpaceSwitcher from '../components/RecipeSpaceSwitcher'
 import Badge from '../components/ui/Badge'
@@ -115,9 +117,11 @@ function getTodayDateKey() {
 type MealPlanPageProps = {
   initialRecipeName?: string
   openAiTrial?: boolean
+  openAiRecommendation?: boolean
   onChangePage: (page: PageName) => void
   onOpenRecipeDetail: (recipeId: string) => void
   onInitialRecipeConsumed?: () => void
+  onAiRecommendationStarted?: () => void
 }
 
 type MealPlanFeedback = {
@@ -232,15 +236,19 @@ function formatMealPlanDate(dateKey: string) {
 function MealPlanPage({
   initialRecipeName,
   openAiTrial = false,
+  openAiRecommendation = false,
   onChangePage,
   onOpenRecipeDetail,
   onInitialRecipeConsumed,
+  onAiRecommendationStarted,
 }: MealPlanPageProps) {
   const mealNameInputRef =
     useRef<HTMLInputElement>(null)
   const mealPlansSectionRef =
     useRef<HTMLDivElement>(null)
   const aiTrialSectionRef =
+    useRef<HTMLDivElement>(null)
+  const recommendationSectionRef =
     useRef<HTMLDivElement>(null)
   const aiAbortControllerRef =
     useRef<AbortController | null>(null)
@@ -277,6 +285,16 @@ function MealPlanPage({
   const [mealName, setMealName] = useState(
     initialRecipeName ?? '',
   )
+  const [selectedRecipeId, setSelectedRecipeId] =
+    useState<string | null>(() =>
+      initialRecipeName
+        ? recipes.find(
+            (recipe) =>
+              recipe.name.trim().toLowerCase() ===
+              initialRecipeName.trim().toLowerCase(),
+          )?.id ?? null
+        : null,
+    )
   const [servings, setServings] = useState(4)
   const [editingId, setEditingId] =
     useState<string | null>(null)
@@ -328,6 +346,28 @@ function MealPlanPage({
       JSON.stringify(sectionState),
     )
   }, [sectionState])
+
+  useEffect(() => {
+    if (!openAiRecommendation) {
+      return
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      setSectionState((current) => ({
+        ...current,
+        recommendations: false,
+      }))
+
+      window.requestAnimationFrame(() => {
+        recommendationSectionRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        })
+      })
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [openAiRecommendation])
 
   function toggleSection(
     section: keyof PlannerSectionState,
@@ -431,6 +471,7 @@ function MealPlanPage({
 
   function resetEditor() {
     setMealName('')
+    setSelectedRecipeId(null)
     setServings(4)
     setEditingId(null)
   }
@@ -449,11 +490,18 @@ function MealPlanPage({
     }
 
     const savedMealName = mealName.trim()
-    const matchedRecipe = recipes.find(
-      (recipe) =>
-        recipe.name.trim().toLowerCase() ===
-        savedMealName.toLowerCase(),
-    )
+    const matchedRecipe =
+      (selectedRecipeId
+        ? recipes.find(
+            (recipe) =>
+              recipe.id === selectedRecipeId,
+          )
+        : undefined) ??
+      recipes.find(
+        (recipe) =>
+          recipe.name.trim().toLowerCase() ===
+          savedMealName.toLowerCase(),
+      )
     const wasEditing = Boolean(editingId)
 
     try {
@@ -510,6 +558,7 @@ function MealPlanPage({
     setDate(mealPlan.date)
     setMealType(mealPlan.type)
     setMealName(mealPlan.name)
+    setSelectedRecipeId(mealPlan.recipeId ?? null)
     setServings(mealPlan.servings ?? 4)
     setEditingId(mealPlan.id)
     setFeedback(null)
@@ -548,16 +597,26 @@ function MealPlanPage({
   }
 
   function handleSelectRecommendedRecipe(
-    recipeName: string,
+    selection: RecipeSelection,
   ) {
-    const recipe = recipes.find(
-      (candidate) =>
-        candidate.name === recipeName,
-    )
+    const recipe = selection.recipeId
+      ? recipes.find(
+          (candidate) =>
+            candidate.id === selection.recipeId,
+        )
+      : recipes.find(
+          (candidate) =>
+            candidate.name === selection.name,
+        )
 
     clearSavedMealConfirmation()
-    setMealName(recipeName)
-    setServings(recipe?.servings ?? 4)
+    setMealName(selection.name)
+    setSelectedRecipeId(
+      selection.recipeId ?? recipe?.id ?? null,
+    )
+    setServings(
+      selection.servings ?? recipe?.servings ?? 4,
+    )
     setFeedback(null)
 
     window.requestAnimationFrame(() => {
@@ -683,7 +742,7 @@ function MealPlanPage({
         tone: 'danger',
         title: '추가할 장보기 재료가 없어요.',
         message:
-          '냉장고 재료와 기본 조미료를 제외하면 준비할 재료가 없어요.',
+          '냉장고 재료와 물을 제외하면 준비할 재료가 없어요.',
       })
       return
     }
@@ -691,7 +750,7 @@ function MealPlanPage({
     setFeedback({
       tone: 'success',
       title: '장보기 목록을 만들었어요.',
-      message: `냉장고 재료와 기본 조미료를 제외한 ${itemCount}가지 재료를 저장했어요.`,
+      message: `냉장고 재료와 물을 제외한 ${itemCount}가지 재료를 저장했어요.`,
     })
   }
 
@@ -1163,7 +1222,17 @@ function MealPlanPage({
                   value={mealName}
                   onChange={(event) => {
                     clearSavedMealConfirmation()
+                    const nextMealName = event.target.value
                     setMealName(event.target.value)
+                    setSelectedRecipeId(
+                      recipes.find(
+                        (recipe) =>
+                          recipe.name
+                            .trim()
+                            .toLowerCase() ===
+                          nextMealName.trim().toLowerCase(),
+                      )?.id ?? null,
+                    )
                   }}
                   placeholder="예: 김치찌개"
                   required
@@ -1464,19 +1533,26 @@ function MealPlanPage({
           </Section>
         </div>
 
-        <RecipeRecommendationBlock
-          onSelectRecipe={
-            handleSelectRecommendedRecipe
-          }
-          onViewRecipe={onOpenRecipeDetail}
-          onOpenInventory={() =>
-            onChangePage('inventory')
-          }
-          collapsed={sectionState.recommendations}
-          onToggle={() =>
-            toggleSection('recommendations')
-          }
-        />
+        <div ref={recommendationSectionRef}>
+          <RecipeRecommendationBlock
+            onSelectRecipe={
+              handleSelectRecommendedRecipe
+            }
+            onViewRecipe={onOpenRecipeDetail}
+            onOpenInventory={() =>
+              onChangePage('inventory')
+            }
+            onOpenShopping={() =>
+              onChangePage('shopping')
+            }
+            autoStartAi={openAiRecommendation}
+            onAiStarted={onAiRecommendationStarted}
+            collapsed={sectionState.recommendations}
+            onToggle={() =>
+              toggleSection('recommendations')
+            }
+          />
+        </div>
 
         <Section
           title="식단으로 장보기"
@@ -1519,8 +1595,7 @@ function MealPlanPage({
                 장보기 목록 만들기
               </Button>
               <p>
-                물, 소금, 식용유, 후추, 설탕은 기본
-                조미료로 보고 제외해요.
+                물은 장보기 목록에서 제외해요.
               </p>
             </div>
           </Card>

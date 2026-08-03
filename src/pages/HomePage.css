@@ -57,6 +57,72 @@
   gap: var(--space-8);
 }
 
+.home-ai-entry {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  overflow: hidden;
+  border-color:
+    color-mix(
+      in srgb,
+      var(--color-primary) 28%,
+      var(--color-border)
+    );
+  background:
+    radial-gradient(
+      circle at 100% 0%,
+      color-mix(
+        in srgb,
+        var(--color-accent) 18%,
+        transparent
+      ),
+      transparent 45%
+    ),
+    linear-gradient(
+      145deg,
+      var(--color-primary-subtle),
+      var(--color-surface-raised)
+    );
+  box-shadow: var(--shadow-md);
+}
+
+.home-ai-entry__content {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.home-ai-entry__content .ui-badge {
+  justify-self: start;
+}
+
+.home-ai-entry h2 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: clamp(28px, 8vw, 36px);
+  line-height: 1.16;
+  letter-spacing: var(--letter-spacing-heading);
+}
+
+.home-ai-entry__content p,
+.home-ai-entry__hint {
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: var(--line-height-body);
+  word-break: keep-all;
+}
+
+.home-ai-entry__action {
+  min-height: 56px;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-extrabold);
+  white-space: nowrap;
+}
+
+.home-ai-entry__hint {
+  font-size: var(--text-xs);
+  text-align: center;
+}
+
 .home-hero {
   padding: 0;
   overflow: hidden;

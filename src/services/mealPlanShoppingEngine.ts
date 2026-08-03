@@ -1,5 +1,6 @@
 import { mergeIngredients } from './ingredientMergeEngine.js'
 import { calculateMissingIngredients } from './inventoryEngine.js'
+import { isWaterIngredientName } from './shoppingIngredientPolicy.js'
 import {
   getMealPlansInRange,
   type MealPlanViewRange,
@@ -8,14 +9,6 @@ import type { Ingredient } from '../types/ingredient'
 import type { InventoryItem } from '../types/inventory'
 import type { PlannedMeal } from '../types/meal'
 import type { Recipe } from '../types/recipe'
-
-const BASIC_PANTRY_INGREDIENTS = new Set([
-  '물',
-  '소금',
-  '식용유',
-  '후추',
-  '설탕',
-])
 
 function normalizeName(name: string) {
   return name.trim().toLowerCase()
@@ -79,9 +72,7 @@ export function createMealPlanShoppingIngredients(
   const mergedIngredients = mergeIngredients(
     ingredients.filter(
       (ingredient) =>
-        !BASIC_PANTRY_INGREDIENTS.has(
-          normalizeName(ingredient.name),
-        ),
+        !isWaterIngredientName(ingredient.name),
     ),
   )
 

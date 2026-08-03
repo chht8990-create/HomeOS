@@ -853,3 +853,86 @@ button {
     max-width: 680px;
   }
 }
+
+.admin-dashboard-page {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.admin-dashboard-state {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+  text-align: center;
+}
+
+.admin-dashboard-state p,
+.admin-ai-switch p,
+.admin-user-list p,
+.admin-user-list span {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.admin-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.admin-metric-grid .ui-card {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.admin-metric-grid strong {
+  font-family: var(--font-family-number);
+  font-size: var(--font-size-number);
+}
+
+.admin-ai-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.admin-ai-switch > div {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.admin-system-grid,
+.admin-user-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.admin-system-grid > div,
+.admin-user-list__heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.admin-system-grid .ui-badge,
+.admin-user-list__heading .ui-badge {
+  margin-left: auto;
+}
+
+.admin-user-list .ui-card {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.admin-user-list__heading strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 430px) {
+  .admin-ai-switch {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

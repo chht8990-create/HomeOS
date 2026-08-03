@@ -1,0 +1,59 @@
+{
+  "packageId": "com.todaytable.app",
+  "host": "home-os-one.vercel.app",
+  "name": "오늘식탁",
+  "launcherName": "오늘식탁",
+  "display": "standalone",
+  "themeColor": "#4E8B67",
+  "themeColorDark": "#4E8B67",
+  "navigationColor": "#FAF7F0",
+  "navigationColorDark": "#FAF7F0",
+  "navigationDividerColor": "#00000000",
+  "navigationDividerColorDark": "#00000000",
+  "backgroundColor": "#FAF7F0",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://home-os-one.vercel.app/brand/today-table-icon-512.png",
+  "maskableIconUrl": "https://home-os-one.vercel.app/brand/today-table-icon-maskable-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./todaytable-upload.jks",
+    "alias": "todaytable-upload"
+  },
+  "appVersion": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://home-os-one.vercel.app/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {
+    "playBilling": {
+      "enabled": true
+    }
+  },
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://home-os-one.vercel.app/",
+  "minSdkVersion": 23,
+  "orientation": "default",
+  "fingerprints": [
+    {
+      "name": "todaytable-upload",
+      "value": "CA:7F:E3:E3:CE:FF:34:5A:A8:09:B6:42:01:71:FE:0D:E1:B3:CC:36:24:D0:82:B6:58:08:50:79:81:9A:73:10"
+    },
+    {
+      "name": "play-app-signing",
+      "value": "38:E7:F1:42:FA:82:88:38:B5:2E:FF:B8:41:2D:AE:B5:91:5E:49:6B:4C:E5:B3:20:B3:3B:BD:2A:FE:75:35:3B"
+    }
+  ],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": []
+}

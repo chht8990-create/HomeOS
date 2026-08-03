@@ -7,10 +7,16 @@ import {
   parseStoredAiMealPlanTrial,
 } from '../services/aiMealPlanTrialEngine'
 import {
+  AI_RECIPE_CHANGE_EVENT,
+  persistAiRecommendationToStorage,
+  readAiRecipesFromStorage,
+} from '../services/aiRecipePersistenceEngine'
+import {
   mergeRecipeCatalog,
   normalizeRecipeCollection,
 } from '../services/recipeNormalizationEngine'
 import type { Recipe } from '../types/recipe'
+import type { AiRecipeRecommendation } from '../types/aiRecipeRecommendation'
 
 const STORAGE_KEY = 'homeos.recipes.imported'
 const CHANGE_EVENT = 'homeos:recipes-changed'
@@ -66,6 +72,10 @@ function readAiMealPlanTrialRecipes(): Recipe[] {
   }
 }
 
+export function readAiRecipes(): Recipe[] {
+  return readAiRecipesFromStorage(window.localStorage)
+}
+
 function useRecipes() {
   const [importedRecipes, setImportedRecipes] =
     useState<Recipe[]>(readImportedRecipes)
@@ -75,6 +85,8 @@ function useRecipes() {
   ] = useState<Recipe[]>(
     readAiMealPlanTrialRecipes,
   )
+  const [aiRecipes, setAiRecipes] =
+    useState<Recipe[]>(readAiRecipes)
 
   useEffect(() => {
     function reloadRecipes() {
@@ -82,6 +94,7 @@ function useRecipes() {
       setAiMealPlanTrialRecipes(
         readAiMealPlanTrialRecipes(),
       )
+      setAiRecipes(readAiRecipes())
     }
 
     window.addEventListener('storage', reloadRecipes)
@@ -91,6 +104,10 @@ function useRecipes() {
     )
     window.addEventListener(
       AI_MEAL_PLAN_TRIAL_CHANGE_EVENT,
+      reloadRecipes,
+    )
+    window.addEventListener(
+      AI_RECIPE_CHANGE_EVENT,
       reloadRecipes,
     )
 
@@ -105,6 +122,10 @@ function useRecipes() {
       )
       window.removeEventListener(
         AI_MEAL_PLAN_TRIAL_CHANGE_EVENT,
+        reloadRecipes,
+      )
+      window.removeEventListener(
+        AI_RECIPE_CHANGE_EVENT,
         reloadRecipes,
       )
     }
@@ -128,11 +149,42 @@ function useRecipes() {
     window.dispatchEvent(new Event(CHANGE_EVENT))
   }
 
+  function saveAiRecommendationAsRecipe(
+    recommendation: AiRecipeRecommendation,
+  ) {
+    const storedAiRecipes = readAiRecipes()
+    const availableRecipes = mergeRecipeCatalog(
+      builtInRecipes,
+      [
+        importedRecipes,
+        aiMealPlanTrialRecipes,
+        storedAiRecipes,
+      ],
+    )
+    const result = persistAiRecommendationToStorage(
+      window.localStorage,
+      recommendation,
+      availableRecipes,
+    )
+
+    if (!result.created) {
+      return result
+    }
+
+    setAiRecipes(result.storedRecipes)
+    window.dispatchEvent(
+      new Event(AI_RECIPE_CHANGE_EVENT),
+    )
+
+    return result
+  }
+
   const allRecipes = mergeRecipeCatalog(
     builtInRecipes,
     [
       importedRecipes,
       aiMealPlanTrialRecipes,
+      aiRecipes,
     ],
   )
 
@@ -140,6 +192,8 @@ function useRecipes() {
     recipes: allRecipes,
     importedRecipes,
     addImportedRecipes,
+    aiRecipes,
+    saveAiRecommendationAsRecipe,
   }
 }
 

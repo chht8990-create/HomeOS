@@ -1,0 +1,16 @@
+.agents/
+.bubblewrap-tooling/
+.env
+.env.*
+!.env.example
+.vercel/
+*.log
+android/
+artifacts/
+brand-assets/
+DASHBOARD_REDESIGN.md
+*.aab
+*.apk
+*.jks
+*.keystore
+*credential*.clixml

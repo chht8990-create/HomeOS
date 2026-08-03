@@ -1,4 +1,6 @@
 import {
+  Bot,
+  Refrigerator,
   Utensils,
 } from 'lucide-react'
 import {
@@ -27,6 +29,7 @@ type HomePageProps = {
   ) => void
   onOpenRecipeDetail: (recipeId: string) => void
   onPlanRecipe: (recipeName: string) => void
+  onStartAiRecommendation: () => void
 }
 
 const dateFormatter = new Intl.DateTimeFormat(
@@ -108,6 +111,7 @@ function HomePage({
   onChangePage,
   onOpenRecipeDetail,
   onPlanRecipe,
+  onStartAiRecommendation,
 }: HomePageProps) {
   const recommendationScrollerRef =
     useRef<HTMLDivElement>(null)
@@ -119,6 +123,7 @@ function HomePage({
   const timeGreeting = getTimeGreeting(now)
   const { mealPlans } = useMealPlan()
   const { items: inventoryItems } = useInventory()
+  const hasInventoryItems = inventoryItems.length > 0
   const { recipes } = useRecipes()
   const todayDate = getTodayDateKey()
   const todayDinner = mealPlans.find(
@@ -168,6 +173,15 @@ function HomePage({
     : missingIngredientItems.length === 0
       ? '지금 만들 수 있어요.'
       : `추가 재료 ${missingIngredientItems.length}개가 필요해요.`
+
+  function handleStartAiRecommendation() {
+    if (!hasInventoryItems) {
+      onChangePage('inventory')
+      return
+    }
+
+    onStartAiRecommendation()
+  }
 
   function updateRecommendationPosition(
     scroller: HTMLDivElement,
@@ -271,6 +285,53 @@ function HomePage({
       </header>
 
       <main className="home-main">
+        <Card className="home-ai-entry home-fade">
+          <div className="home-ai-entry__content">
+            <Badge tone="primary">
+              냉장고 기반 AI 추천
+            </Badge>
+            <h2>
+              {hasInventoryItems
+                ? '냉장고 재료로 오늘 뭐 먹지?'
+                : '오늘 뭐 먹지?'}
+            </h2>
+            {hasInventoryItems ? (
+              <p>
+                현재 등록된 냉장고 재료를 최대한 활용해 오늘
+                만들기 좋은 메뉴를 AI가 추천해 드립니다.
+              </p>
+            ) : (
+              <p>
+                먼저 냉장고에 있는 재료를 등록해 주세요.
+                등록한 재료를 바탕으로 바로 만들기 좋은 메뉴를
+                AI가 추천해 드립니다.
+              </p>
+            )}
+          </div>
+          <Button
+            className="home-ai-entry__action"
+            fullWidth
+            onClick={handleStartAiRecommendation}
+          >
+            {hasInventoryItems ? (
+              <Bot size={20} aria-hidden="true" />
+            ) : (
+              <Refrigerator
+                size={20}
+                aria-hidden="true"
+              />
+            )}
+            {hasInventoryItems
+              ? '냉장고 재료로 AI 추천받기'
+              : '냉장고 재료 등록하기'}
+          </Button>
+          <p className="home-ai-entry__hint">
+            {hasInventoryItems
+              ? `등록 재료 ${inventoryItems.length}개 기준`
+              : '재료 등록 후 AI 추천을 받을 수 있어요.'}
+          </p>
+        </Card>
+
         <Card className="home-hero home-fade">
           <div
             className={`home-hero__visual ${

@@ -97,6 +97,199 @@ try {
   )
 
   await check(
+    'S7.1 정책 페이지: 개인정보처리방침·이용약관 공개 경로와 필수 내용을 제공',
+    () => {
+      const privacy = readFileSync(
+        'src/pages/PrivacyPage.tsx',
+        'utf8',
+      )
+      const terms = readFileSync(
+        'src/pages/TermsPage.tsx',
+        'utf8',
+      )
+      const app = readFileSync('src/App.tsx', 'utf8')
+      const settings = readFileSync(
+        'src/pages/SettingsPage.tsx',
+        'utf8',
+      )
+      const feedback = readFileSync(
+        'src/pages/FeedbackPage.tsx',
+        'utf8',
+      )
+      const contact = readFileSync(
+        'src/config/contact.ts',
+        'utf8',
+      )
+      const playConsoleSetup = readFileSync(
+        'PLAY_CONSOLE_SETUP.md',
+        'utf8',
+      )
+
+      assert.match(privacy, /개인정보처리방침/)
+      assert.match(privacy, /Google 로그인과 계정/)
+      assert.match(privacy, /냉장고 재료/)
+      assert.match(privacy, /OpenAI/)
+      assert.match(privacy, /Trial·Premium/)
+      assert.match(privacy, /데이터의 열람·정정·삭제/)
+      assert.match(terms, /AI 추천과 조리 정보/)
+      assert.match(terms, /Trial과 Premium/)
+      assert.match(terms, /조리할 책임은 사용자/)
+      assert.match(settings, /개인정보처리방침/)
+      assert.match(settings, /이용약관/)
+      assert.match(contact, /todaytable\.help@gmail\.com/)
+      assert.match(privacy, /OFFICIAL_SUPPORT_MAILTO/)
+      assert.match(terms, /OFFICIAL_SUPPORT_MAILTO/)
+      assert.match(settings, /OFFICIAL_SUPPORT_MAILTO/)
+      assert.match(feedback, /OFFICIAL_SUPPORT_MAILTO/)
+      assert.match(
+        playConsoleSetup,
+        /todaytable\.help@gmail\.com/,
+      )
+      assert.doesNotMatch(
+        [
+          privacy,
+          terms,
+          settings,
+          feedback,
+          contact,
+          playConsoleSetup,
+        ].join('\n'),
+        /support@example\.com/,
+      )
+      assert.match(app, /currentPage !== 'privacy'/)
+      assert.match(app, /currentPage !== 'terms'/)
+    },
+  )
+
+  await check(
+    'P3 Android TWA: package·버전·서명키·Production Asset Links',
+    () => {
+      const webManifest = JSON.parse(
+        readFileSync('public/manifest.webmanifest', 'utf8'),
+      )
+      const twaManifest = JSON.parse(
+        readFileSync('android/twa-manifest.json', 'utf8'),
+      )
+      const assetLinks = JSON.parse(
+        readFileSync(
+          'android/assetlinks.template.json',
+          'utf8',
+        ),
+      )
+      const productionAssetLinks = JSON.parse(
+        readFileSync(
+          'public/.well-known/assetlinks.json',
+          'utf8',
+        ),
+      )
+      const androidBuild = readFileSync(
+        'android/app/build.gradle',
+        'utf8',
+      )
+      const releaseBuildScript = readFileSync(
+        'android/build-release.ps1',
+        'utf8',
+      )
+      const gitIgnore = readFileSync('.gitignore', 'utf8')
+      const vercelConfig = JSON.parse(
+        readFileSync('vercel.json', 'utf8'),
+      )
+
+      assert.equal(webManifest.name, '오늘식탁')
+      assert.equal(webManifest.short_name, '오늘식탁')
+      assert.equal(webManifest.start_url, '/')
+      assert.equal(webManifest.scope, '/')
+      assert.equal(webManifest.display, 'standalone')
+      assert.equal(twaManifest.packageId, 'com.todaytable.app')
+      assert.equal(twaManifest.host, 'home-os-one.vercel.app')
+      assert.equal(twaManifest.appVersion, '1.0.0')
+      assert.equal(twaManifest.appVersionCode, 1)
+      assert.equal(twaManifest.minSdkVersion, 23)
+      assert.equal(
+        twaManifest.features.playBilling.enabled,
+        true,
+      )
+      assert.match(
+        androidBuild,
+        /applicationId "com\.todaytable\.app"/,
+      )
+      assert.match(
+        androidBuild,
+        /com\.google\.androidbrowserhelper:billing:/,
+      )
+      assert.equal(
+        assetLinks[0].relation[0],
+        'delegate_permission/common.handle_all_urls',
+      )
+      assert.equal(
+        assetLinks[0].target.package_name,
+        'com.todaytable.app',
+      )
+      assert.equal(
+        assetLinks[0].target.sha256_cert_fingerprints[0],
+        'CA:7F:E3:E3:CE:FF:34:5A:A8:09:B6:42:01:71:FE:0D:E1:B3:CC:36:24:D0:82:B6:58:08:50:79:81:9A:73:10',
+      )
+      assert.equal(
+        assetLinks[0].target.sha256_cert_fingerprints[1],
+        '38:E7:F1:42:FA:82:88:38:B5:2E:FF:B8:41:2D:AE:B5:91:5E:49:6B:4C:E5:B3:20:B3:3B:BD:2A:FE:75:35:3B',
+      )
+      assert.deepEqual(productionAssetLinks, assetLinks)
+      assert.doesNotMatch(
+        JSON.stringify(productionAssetLinks),
+        /REPLACE_WITH_/,
+      )
+      assert.equal(twaManifest.fingerprints.length, 2)
+      assert.equal(
+        twaManifest.fingerprints[0].name,
+        'todaytable-upload',
+      )
+      assert.equal(
+        twaManifest.fingerprints[0].value,
+        assetLinks[0].target.sha256_cert_fingerprints[0],
+      )
+      assert.equal(
+        twaManifest.fingerprints[1].name,
+        'play-app-signing',
+      )
+      assert.equal(
+        twaManifest.fingerprints[1].value,
+        assetLinks[0].target.sha256_cert_fingerprints[1],
+      )
+      assert.match(androidBuild, /signingConfigs \{/)
+      assert.match(
+        androidBuild,
+        /keyAlias 'todaytable-upload'/,
+      )
+      assert.match(
+        androidBuild,
+        /TODAYTABLE_UPLOAD_KEYSTORE/,
+      )
+      assert.match(
+        releaseBuildScript,
+        /Import-Clixml/,
+      )
+      assert.match(
+        releaseBuildScript,
+        /bundleRelease/,
+      )
+      assert.match(gitIgnore, /android\/\*\.jks/)
+      assert.match(gitIgnore, /android\/\*\*\/\*\.aab/)
+      const assetLinksHeaders = vercelConfig.headers.find(
+        (entry) =>
+          entry.source === '/.well-known/assetlinks.json',
+      )
+      assert.ok(assetLinksHeaders)
+      assert.ok(
+        assetLinksHeaders.headers.some(
+          (header) =>
+            header.key === 'Content-Type' &&
+            header.value === 'application/json; charset=utf-8',
+        ),
+      )
+    },
+  )
+
+  await check(
     'PWA 캐시: v1.0.2 앱 셸·업데이트·API 제외 정책',
     () => {
       const serviceWorker = readFileSync(
@@ -107,6 +300,10 @@ try {
       assert.match(
         serviceWorker,
         /RELEASE_VERSION = '1\.0\.2'/,
+      )
+      assert.match(
+        serviceWorker,
+        /CACHE_REVISION = 's7-rc1'/,
       )
       assert.match(
         serviceWorker,
@@ -146,6 +343,15 @@ try {
     await vite.ssrLoadModule(
       '/src/services/inventoryEngine.ts',
     )
+  const {
+    formatInventoryQuantity,
+    isValidInventoryQuantity,
+    parseInventoryQuantity,
+    parseStoredInventoryItems,
+    serializeInventoryItems,
+  } = await vite.ssrLoadModule(
+    '/src/services/inventoryQuantityEngine.ts',
+  )
   const { groupShoppingItemsByCategory } =
     await vite.ssrLoadModule(
       '/src/services/shoppingCategoryEngine.ts',
@@ -194,11 +400,50 @@ try {
     '/src/services/aiRecipeRecommendationEngine.ts',
   )
   const {
+    correctKnownAiText,
+    polishAiMenuTitle,
+  } = await vite.ssrLoadModule(
+    '/src/services/aiTextQualityEngine.ts',
+  )
+  const {
+    excludeWaterIngredients,
+    isWaterIngredientName,
+    coalesceStoredShoppingIngredientAliases,
+    normalizeShoppingIngredientDisplayName,
+    normalizeShoppingIngredientMatchName,
+  } = await vite.ssrLoadModule(
+    '/src/services/shoppingIngredientPolicy.ts',
+  )
+  const {
+    AI_RECIPE_STORAGE_KEY,
+    convertAiRecommendationToRecipe,
+    createAiRecommendationFingerprint,
+    findMatchingRecipeForAiRecommendation,
+    parseStoredAiRecipes,
+    persistAiRecommendationToStorage,
+    recalculateAiRecommendationForInventory,
+    resolveAiRecipePersistence,
+  } = await vite.ssrLoadModule(
+    '/src/services/aiRecipePersistenceEngine.ts',
+  )
+  const {
     handleAiRecipeRecommendation,
     mapOpenAiError,
     parseOpenAiErrorDetails,
   } = await vite.ssrLoadModule(
     '/api/ai/recipe-recommendation.ts',
+  )
+  const {
+    compactAiRecommendationOutputForTests,
+    expandCompactAiRecommendationOutput,
+    parseCompactAiRecommendationText,
+  } = await vite.ssrLoadModule(
+    '/src/server/compactAiRecommendationEngine.ts',
+  )
+  const {
+    requestAiRecipeRecommendations,
+  } = await vite.ssrLoadModule(
+    '/src/services/aiRecipeRecommendationClient.ts',
   )
   const { recipes: builtInRecipes } =
     await vite.ssrLoadModule(
@@ -222,6 +467,7 @@ try {
       '/src/services/ingredientUnitEngine.ts',
     )
   const {
+    createManualIngredientShoppingItems,
     replaceMealShoppingSourceItems,
     replaceMealPlanRangeShoppingItems,
   } = await vite.ssrLoadModule(
@@ -316,6 +562,10 @@ try {
   } = await vite.ssrLoadModule(
     '/src/services/mealPlanShoppingEngine.ts',
   )
+  const { createPlannerShoppingChange } =
+    await vite.ssrLoadModule(
+      '/src/services/mealPlanIntegrationEngine.ts',
+    )
   const {
     addRecipeToStoredAiMealPlanTrial,
     classifyAiMealCookingType,
@@ -353,6 +603,184 @@ try {
   )
   const { handleFeedback } =
     await vite.ssrLoadModule('/api/feedback.ts')
+  const {
+    createAnonymousAuthSession,
+    createGoogleSignInPath,
+    isAuthenticatedSession,
+    normalizeAuthReturnTo,
+    parseAuthSession,
+  } = await vite.ssrLoadModule(
+    '/src/services/authEngine.ts',
+  )
+  const {
+    ACCOUNT_SYNC_METADATA_STORAGE_KEY,
+    chooseInitialAccountSyncStrategy,
+    classifyAccountStorageKey,
+    resolveLatestAccountSyncRecord,
+  } = await vite.ssrLoadModule(
+    '/src/services/accountSyncEngine.ts',
+  )
+  const {
+    AI_TRIAL_DURATION_DAYS,
+    canGenerateMealPlan,
+    canGenerateRecipe,
+    canUseAI,
+    createInitialAiAccessUsage,
+    createTrialAiAccessUsage,
+    getRemainingTrialDays,
+    getSubscriptionStatus,
+    parseAiAccessUsage,
+    recordAiGeneration,
+    resolveAiAccessUsage,
+  } = await vite.ssrLoadModule(
+    '/src/services/aiAccessEngine.ts',
+  )
+  const {
+    AI_ACCESS_STORAGE_KEY,
+    createLocalAiAccessService,
+    initializeAiAccessUsage,
+  } = await vite.ssrLoadModule(
+    '/src/services/aiAccessStorage.ts',
+  )
+  const {
+    createServerEntitlement,
+    recordServerAiGeneration,
+    resolveServerEntitlement,
+    startTrialAfterGoogleLogin,
+  } = await vite.ssrLoadModule(
+    '/src/server/entitlementEngine.ts',
+  )
+  const {
+    SERVER_SESSION_COOKIE_NAME,
+    SERVER_SESSION_DURATION_MS,
+    SERVER_SESSION_ROTATION_MS,
+    createExpiredSessionCookie,
+    createServerSession,
+    createSessionCookie,
+    hashSessionToken,
+    isServerSessionActive,
+    readSessionToken,
+    shouldRotateServerSession,
+  } = await vite.ssrLoadModule(
+    '/src/server/sessionEngine.ts',
+  )
+  const {
+    establishVerifiedGoogleSession,
+    handleAuthLogin,
+  } = await vite.ssrLoadModule(
+    '/src/server/serverApiEngine.ts',
+  )
+  const { handleAuthLogout } =
+    await vite.ssrLoadModule('/api/auth/logout.ts')
+  const { handleAuthSession } =
+    await vite.ssrLoadModule('/api/auth/session.ts')
+  const { handleAccountSync } =
+    await vite.ssrLoadModule('/api/account/sync.ts')
+  const { handleEntitlement } =
+    await vite.ssrLoadModule('/api/entitlement.ts')
+  const {
+    handleAdminRoute,
+    resolveAdminApiAction,
+  } = await vite.ssrLoadModule('/api/admin.ts')
+  const {
+    constantTimeEqual,
+    createOAuthTransaction,
+    createPkceCodeChallenge,
+    openOAuthTransaction,
+    sealOAuthTransaction,
+  } = await vite.ssrLoadModule(
+    '/src/server/oauthStateEngine.ts',
+  )
+  const {
+    createGoogleAuthorizationUrl,
+    exchangeGoogleAuthorizationCode,
+    parseGoogleOAuthConfig,
+  } = await vite.ssrLoadModule(
+    '/src/server/googleOAuthEngine.ts',
+  )
+  const {
+    clearGoogleJwksCacheForTests,
+    verifyGoogleIdToken,
+  } = await vite.ssrLoadModule(
+    '/src/server/googleIdTokenEngine.ts',
+  )
+  const { handleGoogleAuthRoute } =
+    await vite.ssrLoadModule(
+      '/src/server/googleAuthApiEngine.ts',
+    )
+  const {
+    applyVerifiedPurchaseToEntitlement,
+    createAiCacheKey,
+    createAiUsageEvent,
+    estimateAiCostUsd,
+    isPremiumBillingState,
+    parseGooglePlaySubscription,
+    reconcileGooglePlayEntitlement,
+  } = await vite.ssrLoadModule(
+    '/src/server/businessEngine.ts',
+  )
+  const {
+    parseBillingRestoreRequest,
+    parseBillingVerificationRequest,
+    parseGooglePlayBillingConfig,
+    verifyGooglePlaySubscription,
+  } = await vite.ssrLoadModule(
+    '/src/server/googlePlayBillingEngine.ts',
+  )
+  const {
+    applyAccountSyncSnapshot,
+    captureAccountSyncSnapshot,
+    syncAccountStorage,
+  } = await vite.ssrLoadModule(
+    '/src/services/accountSyncClient.ts',
+  )
+  const {
+    ACCOUNT_SYNC_DEBOUNCE_MS,
+    ACCOUNT_SYNC_MUTATION_EVENTS,
+    createAccountSyncScheduler,
+  } = await vite.ssrLoadModule(
+    '/src/services/accountSyncScheduler.ts',
+  )
+  const {
+    addRecordDeletionTombstones,
+    mergeAccountSyncSnapshots,
+    parseAccountSyncSnapshot,
+  } = await vite.ssrLoadModule(
+    '/src/services/accountSnapshotEngine.ts',
+  )
+  const {
+    resetAuthSessionCache,
+    restoreAuthSession,
+  } = await vite.ssrLoadModule(
+    '/src/services/authClient.ts',
+  )
+
+  const createAccountSyncTestStorage = (
+    initialEntries = [],
+  ) => {
+    const values = new Map(initialEntries)
+
+    return {
+      values,
+      storage: {
+        get length() {
+          return values.size
+        },
+        key(index) {
+          return [...values.keys()][index] ?? null
+        },
+        getItem(key) {
+          return values.get(key) ?? null
+        },
+        setItem(key, value) {
+          values.set(key, value)
+        },
+        removeItem(key) {
+          values.delete(key)
+        },
+      },
+    }
+  }
 
   const recipe = {
     id: 'recipe-test-stew',
@@ -831,7 +1259,7 @@ try {
   )
 
   await check(
-    'Inventory: 목록은 계산 수량을 숨기고 재료명만 표시',
+    'Inventory: 목록은 재료명과 정확한 저장 수량을 구분해 표시',
     () => {
       const item = {
         name: ' 양파 ',
@@ -846,6 +1274,15 @@ try {
       assert.doesNotMatch(
         getInventoryListDisplayName(item),
         /12|g/,
+      )
+      assert.equal(formatInventoryQuantity(0.25), '0.25')
+      assert.match(
+        inventoryPageSource,
+        /formatInventoryQuantity\(item\.quantity\)/,
+      )
+      assert.match(
+        inventoryPageSource,
+        /inventory-item__quantity ui-number/,
       )
       assert.match(
         inventoryPageSource,
@@ -1076,6 +1513,194 @@ try {
           result.missingIngredientCount,
         ),
         50,
+      )
+    },
+  )
+
+  await check(
+    'S6.0 Inventory: 임의 소수를 유한한 양수로 저장하고 그대로 복원',
+    () => {
+      const inventoryItems = [
+        {
+          id: 'fractional-cabbage',
+          name: '양배추',
+          quantity: 0.25,
+          unit: '통',
+          location: 'fridge',
+          createdAt: '2026-08-03T00:00:00.000Z',
+          updatedAt: '2026-08-03T00:00:00.000Z',
+        },
+        {
+          id: 'fractional-tofu',
+          name: '두부',
+          quantity: 0.5,
+          unit: '모',
+          location: 'fridge',
+          createdAt: '2026-08-03T00:00:00.000Z',
+          updatedAt: '2026-08-03T00:00:00.000Z',
+        },
+      ]
+      const restored = parseStoredInventoryItems(
+        serializeInventoryItems(inventoryItems),
+      )
+
+      assert.equal(restored[0].quantity, 0.25)
+      assert.equal(restored[1].quantity, 0.5)
+      assert.equal(parseInventoryQuantity('0.3'), 0.3)
+      assert.equal(parseInventoryQuantity('1.75'), 1.75)
+      assert.equal(parseInventoryQuantity(''), null)
+      assert.equal(parseInventoryQuantity('0'), null)
+      assert.equal(parseInventoryQuantity('-0.5'), null)
+      assert.equal(parseInventoryQuantity('NaN'), null)
+      assert.equal(parseInventoryQuantity('Infinity'), null)
+      assert.equal(isValidInventoryQuantity(0.25), true)
+      assert.equal(isValidInventoryQuantity(Infinity), false)
+
+      const inventoryPage = readFileSync(
+        'src/pages/InventoryPage.tsx',
+        'utf8',
+      )
+
+      assert.match(inventoryPage, /step="any"/)
+      assert.match(inventoryPage, /inputMode="decimal"/)
+      assert.doesNotMatch(inventoryPage, /step="0\.1"/)
+    },
+  )
+
+  await check(
+    'S6.0 Inventory: 소수 재고를 AI·Recipe·Shopping·Planner에서 손실 없이 계산',
+    () => {
+      const inventoryItems = [
+        {
+          id: 'fractional-cabbage',
+          name: '양배추',
+          quantity: 0.25,
+          unit: '통',
+          location: 'fridge',
+          createdAt: '2026-08-03T00:00:00.000Z',
+          updatedAt: '2026-08-03T00:00:00.000Z',
+        },
+      ]
+      const recipeIngredient = {
+        id: 'recipe-cabbage',
+        name: '양배추',
+        quantity: 1,
+        unit: '통',
+      }
+      const validation =
+        validateAiRecipeRecommendationRequest({
+          inventoryItems: [
+            {
+              name: '양배추',
+              quantity: 0.25,
+              unit: '통',
+            },
+          ],
+          servings: 2,
+        })
+
+      assert.equal(validation.ok, true)
+      assert.equal(
+        validation.ok
+          ? validation.data.inventoryItems[0].quantity
+          : null,
+        0.25,
+      )
+      assert.equal(
+        calculateMissingIngredients(
+          [recipeIngredient],
+          inventoryItems,
+        )[0].quantity,
+        0.75,
+      )
+
+      const plannerShopping =
+        createMealPlanShoppingIngredients(
+          [
+            {
+              id: 'fractional-plan',
+              date: '2026-08-03',
+              type: 'dinner',
+              status: 'planned',
+              name: '양배추 요리',
+              recipeId: 'fractional-recipe',
+              servings: 2,
+              createdAt: '2026-08-03T00:00:00.000Z',
+              updatedAt: '2026-08-03T00:00:00.000Z',
+            },
+          ],
+          [
+            {
+              id: 'fractional-recipe',
+              name: '양배추 요리',
+              servings: 2,
+              ingredients: [recipeIngredient],
+            },
+          ],
+          inventoryItems,
+          '2026-08-03',
+          'today',
+        )
+
+      assert.equal(
+        plannerShopping.ingredients[0].quantity,
+        0.75,
+      )
+    },
+  )
+
+  await check(
+    'S6.0 Account Sync: 소수 재고 snapshot을 다른 저장소에 그대로 복원',
+    () => {
+      const value = serializeInventoryItems([
+        {
+          id: 'sync-cabbage',
+          name: '양배추',
+          quantity: 0.25,
+          unit: '통',
+          location: 'fridge',
+          createdAt: '2026-08-03T00:00:00.000Z',
+          updatedAt: '2026-08-03T00:00:00.000Z',
+        },
+      ])
+      const sourceValues = new Map([
+        ['homeos.inventory', value],
+      ])
+      const targetValues = new Map()
+      const createStorage = (values) => ({
+        get length() {
+          return values.size
+        },
+        key(index) {
+          return [...values.keys()][index] ?? null
+        },
+        getItem(key) {
+          return values.get(key) ?? null
+        },
+        setItem(key, nextValue) {
+          values.set(key, nextValue)
+        },
+        removeItem(key) {
+          values.delete(key)
+        },
+      })
+      const snapshot = captureAccountSyncSnapshot(
+        createStorage(sourceValues),
+        '2026-08-03T01:00:00.000Z',
+      )
+
+      assert.equal(
+        applyAccountSyncSnapshot(
+          createStorage(targetValues),
+          snapshot,
+        ),
+        true,
+      )
+      assert.equal(
+        parseStoredInventoryItems(
+          targetValues.get('homeos.inventory'),
+        )[0].quantity,
+        0.25,
       )
     },
   )
@@ -3404,6 +4029,16 @@ try {
           null,
           '?page=recipes&fromInventory=1',
         )
+      const privacy = readNavigationState(
+        null,
+        '',
+        '/privacy',
+      )
+      const terms = readNavigationState(
+        null,
+        '',
+        '/terms/',
+      )
 
       assert.equal(restored.recipeId, 'kimchi-stew')
       assert.equal(direct.page, 'recipes')
@@ -3412,6 +4047,22 @@ try {
         inventoryRecommendation
           .showInventoryRecommendations,
         true,
+      )
+      assert.equal(privacy.page, 'privacy')
+      assert.equal(terms.page, 'terms')
+      assert.equal(
+        createNavigationUrl(
+          privacy,
+          'https://example.com/?page=recipes',
+        ),
+        '/privacy',
+      )
+      assert.equal(
+        createNavigationUrl(
+          terms,
+          'https://example.com/privacy',
+        ),
+        '/terms',
       )
       assert.equal(
         createNavigationUrl(
@@ -3632,6 +4283,75 @@ try {
   )
 
   await check(
+    'Sprint S4.1: compact AI 응답을 기존 Recipe 계약으로 손실 없이 복원',
+    () => {
+      const recommendation = {
+        title: '두부 김치찌개',
+        summary: '김치와 두부를 활용한 따뜻한 찌개예요.',
+        servings: 2,
+        estimatedMinutes: 30,
+        ...createTestAiDetails(['김치', '두부'], 30),
+        ingredients: [
+          {
+            name: '김치',
+            quantity: 0.5,
+            unit: '포기',
+            available: true,
+            group: 'main',
+            note: null,
+            optional: false,
+            substitute: [],
+          },
+          {
+            name: '두부',
+            quantity: 1,
+            unit: '모',
+            available: true,
+            group: 'main',
+            note: null,
+            optional: false,
+            substitute: [],
+          },
+        ],
+        missingIngredients: [],
+      }
+      const full = { recommendations: [recommendation] }
+      const compact =
+        compactAiRecommendationOutputForTests(full)
+      const expanded =
+        expandCompactAiRecommendationOutput(compact)
+      const parsedCompact =
+        parseCompactAiRecommendationText(
+          JSON.stringify(compact),
+        )
+
+      assert.deepEqual(expanded, full)
+      assert.deepEqual(parsedCompact, full)
+      assert.equal(
+        parseAiRecipeRecommendationOutput(expanded)?.[0]
+          .title,
+        '두부 김치찌개',
+      )
+      assert.ok(
+        JSON.stringify(compact).length <
+          JSON.stringify(full).length * 0.75,
+      )
+      assert.equal(
+        parseCompactAiRecommendationText('{"r":['),
+        null,
+      )
+      assert.equal(
+        parseAiRecipeRecommendationOutput(
+          parseCompactAiRecommendationText(
+            JSON.stringify({ r: [{ n: '불완전' }] }),
+          ),
+        ),
+        null,
+      )
+    },
+  )
+
+  await check(
     'AI response: 중복·보유 상태·부족 수량·제외 재료를 정규화',
     () => {
       const rawRecommendations = [
@@ -3800,6 +4520,549 @@ try {
   )
 
   await check(
+    'S5.1: 물만 부족 재료에서 제외하고 조미료와 문구는 보존',
+    async () => {
+      assert.equal(isWaterIngredientName('물'), true)
+      assert.equal(isWaterIngredientName(' 생 수 '), true)
+      assert.equal(isWaterIngredientName('식수'), true)
+      assert.equal(isWaterIngredientName('소금'), false)
+      assert.equal(isWaterIngredientName('후추'), false)
+      assert.equal(isWaterIngredientName('설탕'), false)
+      assert.equal(isWaterIngredientName('간장'), false)
+      assert.equal(isWaterIngredientName('식용유'), false)
+      assert.equal(isWaterIngredientName('참기름'), false)
+      assert.equal(isWaterIngredientName('고추가루'), false)
+      assert.deepEqual(
+        excludeWaterIngredients([
+          { name: '물' },
+          { name: '후추' },
+          { name: '생수' },
+        ]),
+        [{ name: '후추' }],
+      )
+
+      const ingredientNames = [
+        '감자',
+        '물',
+        '후추',
+        '소금',
+        '설탕',
+      ]
+      const recommendation = {
+        title: '감자양파 계란국',
+        summary: '감자와 양파를 끓인 뒤 게란을 풀어요.',
+        servings: 2,
+        estimatedMinutes: 25,
+        ingredients: ingredientNames.map((name) => ({
+          name,
+          quantity: name === '물' ? 600 : 1,
+          unit: name === '물' ? 'ml' : name === '감자' ? '개' : 'g',
+          available: false,
+          group: name === '감자' ? 'main' : 'seasoning',
+          note: null,
+          optional: false,
+          substitute: [],
+        })),
+        missingIngredients: [],
+        ...createTestAiDetails(ingredientNames, 25),
+      }
+      recommendation.steps[0].instruction =
+        '게란을 잘 풀어요.'
+
+      const [normalized] =
+        normalizeAiRecipeRecommendations(
+          [recommendation],
+          {
+            inventoryItems: [
+              {
+                name: '감자',
+                quantity: 1,
+                unit: '개',
+              },
+            ],
+            servings: 2,
+          },
+        )
+
+      assert.equal(normalized.title, '감자 양파 계란국')
+      assert.match(normalized.summary, /계란/)
+      assert.doesNotMatch(normalized.summary, /게란/)
+      assert.match(normalized.steps[0].instruction, /계란/)
+      assert.deepEqual(
+        normalized.missingIngredients.map(
+          (ingredient) => ingredient.name,
+        ),
+        ['후추', '소금', '설탕'],
+      )
+      assert.equal(
+        recalculateAiRecommendationForInventory(
+          normalized,
+          [],
+        ).missingIngredients.some((ingredient) =>
+          isWaterIngredientName(ingredient.name),
+        ),
+        false,
+      )
+      assert.equal(
+        polishAiMenuTitle('감자양파 계란국'),
+        '감자 양파 계란국',
+      )
+      assert.equal(
+        correctKnownAiText('게란을 풀어요.'),
+        '계란을 풀어요.',
+      )
+      const aiCardSource = readFileSync(
+        'src/blocks/RecipeRecommendationBlock.tsx',
+        'utf8',
+      )
+      assert.match(
+        aiCardSource,
+        /isWaterIngredientName\(\s*ingredient\.name/,
+      )
+      assert.match(aiCardSource, /장보기 제외/)
+
+      const originalWindow = globalThis.window
+      globalThis.window = {
+        setTimeout,
+        clearTimeout,
+      }
+
+      try {
+        const clientResult =
+          await requestAiRecipeRecommendations(
+            {
+              inventoryItems: [
+                {
+                  name: 'S5.1 감자',
+                  quantity: 1,
+                  unit: '개',
+                },
+              ],
+              servings: 2,
+            },
+            async () =>
+              Response.json({
+                recommendations: [recommendation],
+                meta: { maxRecommendations: 3 },
+              }),
+          )
+
+        assert.equal(
+          clientResult.recommendations[0]
+            .missingIngredients.some((ingredient) =>
+              isWaterIngredientName(ingredient.name),
+            ),
+          false,
+        )
+      } finally {
+        globalThis.window = originalWindow
+      }
+    },
+  )
+
+  await check(
+    'S5.2: Case 5 카드 부족 재료와 장보기를 일치시키고 후추 계열을 중복 방지',
+    () => {
+      assert.equal(
+        normalizeShoppingIngredientMatchName(
+          '후춧가루',
+        ),
+        '후추',
+      )
+      assert.equal(
+        normalizeShoppingIngredientMatchName(
+          ' 후추 가루 ',
+        ),
+        '후추',
+      )
+      assert.equal(
+        normalizeShoppingIngredientDisplayName(
+          '후춧가루',
+        ),
+        '후추',
+      )
+
+      const ingredientDefinitions = [
+        ['닭가슴살', 300, 'g', 'main'],
+        ['브로콜리', 1, '송이', 'main'],
+        ['버섯', 200, 'g', 'main'],
+        ['간장', 30, 'ml', 'seasoning'],
+        ['다진 마늘', 10, 'g', 'seasoning'],
+        ['식용유', 15, 'ml', 'seasoning'],
+        ['소금', 2, 'g', 'seasoning'],
+        ['후추', 1, 'g', 'seasoning'],
+        ['후춧가루', 1, 'g', 'seasoning'],
+      ]
+      const ingredientNames =
+        ingredientDefinitions.map(([name]) => name)
+      const recommendation = {
+        title: '닭가슴살 브로콜리 버섯 간장북음',
+        summary: '닭가슴살과 채소를 간장 양념에 북은 한 끼',
+        servings: 2,
+        estimatedMinutes: 30,
+        ingredients: ingredientDefinitions.map(
+          ([name, quantity, unit, group]) => ({
+            name,
+            quantity,
+            unit,
+            available: false,
+            group,
+            note: null,
+            optional: false,
+            substitute: [],
+          }),
+        ),
+        missingIngredients: [],
+        ...createTestAiDetails(ingredientNames, 30),
+      }
+      const [normalized] =
+        normalizeAiRecipeRecommendations(
+          [recommendation],
+          {
+            inventoryItems: [
+              { name: '닭가슴살', quantity: 300, unit: 'g' },
+              { name: '브로콜리', quantity: 1, unit: '송이' },
+              { name: '버섯', quantity: 200, unit: 'g' },
+            ],
+            servings: 2,
+          },
+        )
+      const cardMissingNames =
+        normalized.missingIngredients.map(
+          (ingredient) => ingredient.name,
+        )
+      const shoppingItems =
+        createManualIngredientShoppingItems(
+          normalized.missingIngredients.map(
+            (ingredient, index) => ({
+              id: `s5-2-${index}`,
+              ...ingredient,
+            }),
+          ),
+        )
+      const shoppingNames = shoppingItems.map(
+        (item) => item.name,
+      )
+
+      assert.deepEqual(cardMissingNames, [
+        '간장',
+        '다진 마늘',
+        '식용유',
+        '소금',
+        '후추',
+      ])
+      assert.deepEqual(shoppingNames, cardMissingNames)
+      const pepperShoppingItems =
+        createManualIngredientShoppingItems([
+          {
+            id: 'pepper-1',
+            name: '후추',
+            quantity: 1,
+            unit: 'g',
+          },
+          {
+            id: 'pepper-2',
+            name: '후춧가루',
+            quantity: 1,
+            unit: 'g',
+          },
+        ])
+      assert.deepEqual(
+        pepperShoppingItems.map((item) => item.name),
+        ['후추'],
+      )
+      const coalescedLegacyPepper =
+        coalesceStoredShoppingIngredientAliases([
+          {
+            id: 'legacy-pepper',
+            name: '후추',
+            quantity: 1,
+            unit: 'g',
+            completed: false,
+            source: 'manual',
+            sourceKind: 'manual',
+            purchaseStatus: 'planned',
+            createdAt: '2026-08-03T00:00:00.000Z',
+            updatedAt: '2026-08-03T00:00:00.000Z',
+          },
+          {
+            id: 'legacy-pepper-powder',
+            name: '후춧가루',
+            quantity: 1,
+            unit: 'g',
+            completed: false,
+            source: 'manual',
+            sourceKind: 'manual',
+            purchaseStatus: 'planned',
+            createdAt: '2026-08-03T00:00:01.000Z',
+            updatedAt: '2026-08-03T00:00:01.000Z',
+          },
+        ])
+      assert.equal(coalescedLegacyPepper.length, 1)
+      assert.equal(coalescedLegacyPepper[0].name, '후추')
+      assert.equal(coalescedLegacyPepper[0].quantity, 1)
+
+      const protectedPurchasedPepper =
+        coalesceStoredShoppingIngredientAliases([
+          {
+            ...coalescedLegacyPepper[0],
+            id: 'purchased-pepper',
+            purchaseStatus: 'completed',
+            completed: true,
+            purchasedTotalQuantity: 1,
+          },
+          {
+            ...coalescedLegacyPepper[0],
+            id: 'planned-pepper-powder',
+            name: '후춧가루',
+          },
+        ])
+      assert.equal(protectedPurchasedPepper.length, 2)
+      assert.equal(
+        normalized.ingredients.filter(
+          (ingredient) =>
+            normalizeShoppingIngredientMatchName(
+              ingredient.name,
+            ) === '후추',
+        ).length,
+        1,
+      )
+      assert.equal(
+        shoppingNames.includes('후춧가루'),
+        false,
+      )
+
+      const recommendationBlockSource = readFileSync(
+        'src/blocks/RecipeRecommendationBlock.tsx',
+        'utf8',
+      )
+      assert.match(
+        recommendationBlockSource,
+        /setAiRecommendations\(\(current\)/,
+      )
+      assert.match(
+        recommendationBlockSource,
+        /currentRecommendation\.missingIngredients\.map/,
+      )
+      assert.match(
+        recommendationBlockSource,
+        /ai-recommendation:\$\{createAiRecommendationFingerprint\(currentRecommendation\)\}/,
+      )
+      assert.match(
+        recommendationBlockSource,
+        /const addedItemCount = addMealItems\(/,
+      )
+      assert.match(
+        recommendationBlockSource,
+        /addedIngredientNames/,
+      )
+    },
+  )
+
+  await check(
+    'AI recipe persistence: full recipe conversion, fingerprint deduplication, and user edit protection',
+    () => {
+      const recommendation = {
+        title: '두부 달걀 볶음',
+        summary: '냉장고 재료로 빠르게 만드는 한 끼',
+        servings: 2,
+        estimatedMinutes: 25,
+        ingredients: [
+          {
+            name: '계란',
+            quantity: 2,
+            unit: '개',
+            available: false,
+            group: 'main',
+            note: null,
+            optional: false,
+            substitute: [],
+          },
+          {
+            name: '두부',
+            quantity: 1,
+            unit: '모',
+            available: true,
+            group: 'main',
+            note: null,
+            optional: false,
+            substitute: [],
+          },
+        ],
+        missingIngredients: [
+          { name: '계란', quantity: 2, unit: '개' },
+        ],
+        ...createTestAiDetails(['계란', '두부'], 25),
+      }
+      const created = convertAiRecommendationToRecipe(
+        recommendation,
+        '2026-08-02T00:00:00.000Z',
+      )
+
+      assert.equal(created.source, 'ai')
+      assert.equal(
+        created.fingerprint,
+        createAiRecommendationFingerprint(recommendation),
+      )
+      assert.equal(created.steps.length, 8)
+      assert.equal(
+        created.ingredientGroups.mainIngredients.length,
+        2,
+      )
+      assert.equal(parseStoredAiRecipes([created]).length, 1)
+
+      const matchingExistingRecipe = {
+        ...created,
+        id: 'existing-custom-recipe',
+        source: undefined,
+        fingerprint: undefined,
+      }
+      assert.equal(
+        findMatchingRecipeForAiRecommendation(
+          recommendation,
+          [matchingExistingRecipe],
+        ).id,
+        matchingExistingRecipe.id,
+      )
+
+      const userEditedRecipe = {
+        ...created,
+        description: '사용자가 수정한 설명',
+      }
+      const duplicateResult = resolveAiRecipePersistence(
+        recommendation,
+        [userEditedRecipe],
+      )
+
+      assert.equal(duplicateResult.created, false)
+      assert.equal(
+        duplicateResult.recipe.description,
+        '사용자가 수정한 설명',
+      )
+
+      const storedValues = new Map()
+      const storage = {
+        getItem(key) {
+          return storedValues.get(key) ?? null
+        },
+        setItem(key, value) {
+          storedValues.set(key, value)
+        },
+      }
+      const firstSave = persistAiRecommendationToStorage(
+        storage,
+        recommendation,
+        [],
+        '2026-08-02T00:00:00.000Z',
+      )
+      const secondSave = persistAiRecommendationToStorage(
+        storage,
+        recommendation,
+        firstSave.storedRecipes,
+        '2026-08-02T01:00:00.000Z',
+      )
+
+      assert.equal(firstSave.created, true)
+      assert.equal(secondSave.created, false)
+      assert.equal(secondSave.storedRecipes.length, 1)
+    },
+  )
+
+  await check(
+    'AI recipe integration: recipeId-first Planner link and latest inventory shopping recalculation',
+    () => {
+      const recommendation = {
+        title: '두부 달걀 볶음',
+        summary: '냉장고 재료로 빠르게 만드는 한 끼',
+        servings: 2,
+        estimatedMinutes: 25,
+        ingredients: [
+          {
+            name: '계란',
+            quantity: 2,
+            unit: '개',
+            available: false,
+            group: 'main',
+            note: null,
+            optional: false,
+            substitute: [],
+          },
+          {
+            name: '두부',
+            quantity: 1,
+            unit: '모',
+            available: false,
+            group: 'main',
+            note: null,
+            optional: false,
+            substitute: [],
+          },
+        ],
+        missingIngredients: [
+          { name: '계란', quantity: 2, unit: '개' },
+          { name: '두부', quantity: 1, unit: '모' },
+        ],
+        ...createTestAiDetails(['계란', '두부'], 25),
+      }
+      const savedRecipe =
+        convertAiRecommendationToRecipe(recommendation)
+      const recalculated =
+        recalculateAiRecommendationForInventory(
+          recommendation,
+          [
+            { name: '달걀', quantity: 1, unit: '개' },
+            { name: '두부', quantity: 1, unit: '모' },
+          ],
+        )
+
+      assert.deepEqual(recalculated.missingIngredients, [
+        { name: '계란', quantity: 1, unit: '개' },
+      ])
+
+      const plannedMeal = {
+        id: '2026-08-02-dinner',
+        date: '2026-08-02',
+        type: 'dinner',
+        status: 'planned',
+        name: savedRecipe.name,
+        recipeId: savedRecipe.id,
+        servings: 2,
+        source: 'manual',
+        createdAt: '2026-08-02T00:00:00.000Z',
+        updatedAt: '2026-08-02T00:00:00.000Z',
+      }
+      const sameNameWrongRecipe = {
+        id: 'same-name-wrong-recipe',
+        name: savedRecipe.name,
+        ingredients: [
+          {
+            id: 'wrong-ingredient',
+            name: '설탕',
+            quantity: 100,
+            unit: 'g',
+          },
+        ],
+      }
+      const change = createPlannerShoppingChange(
+        [plannedMeal],
+        {
+          date: plannedMeal.date,
+          type: plannedMeal.type,
+          name: plannedMeal.name,
+          recipeId: plannedMeal.recipeId,
+        },
+        [sameNameWrongRecipe, savedRecipe],
+      )
+
+      assert.equal(change.sourceRecipeId, savedRecipe.id)
+      assert.deepEqual(
+        change.ingredients.map((ingredient) => ingredient.name),
+        ['계란', '두부'],
+      )
+    },
+  )
+
+  await check(
     'AI endpoint: API Key 미설정 상태를 명확히 반환',
     async () => {
       const response =
@@ -3831,6 +5094,88 @@ try {
 
       assert.equal(response.status, 503)
       assert.equal(body.code, 'AI_NOT_CONFIGURED')
+    },
+  )
+
+  await check(
+    'AI endpoint: server timeout aborts before the Vercel limit',
+    async () => {
+      const originalFetch = globalThis.fetch
+      const originalSetTimeout = globalThis.setTimeout
+      const originalClearTimeout = globalThis.clearTimeout
+      const observedDelays = []
+      let fetchCount = 0
+
+      globalThis.setTimeout = (callback, delay) => {
+        observedDelays.push(delay)
+        queueMicrotask(callback)
+        return 1
+      }
+      globalThis.clearTimeout = () => {}
+      globalThis.fetch = async (_url, init) => {
+        fetchCount += 1
+
+        return new Promise((_, reject) => {
+          const rejectAsAborted = () =>
+            reject(
+              new DOMException(
+                'The operation was aborted.',
+                'AbortError',
+              ),
+            )
+
+          if (init?.signal?.aborted) {
+            rejectAsAborted()
+            return
+          }
+
+          init?.signal?.addEventListener(
+            'abort',
+            rejectAsAborted,
+            { once: true },
+          )
+        })
+      }
+
+      try {
+        const response =
+          await handleAiRecipeRecommendation(
+            new Request(
+              'http://localhost/api/ai/recipe-recommendation',
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  inventoryItems: [
+                    {
+                      name: 'timeout test ingredient',
+                      quantity: 1,
+                      unit: 'item',
+                    },
+                  ],
+                  servings: 2,
+                }),
+              },
+            ),
+            {
+              OPENAI_API_KEY: 'sk-test-not-a-real-key',
+              OPENAI_MODEL: 'gpt-5.6-luna',
+              NODE_ENV: 'production',
+            },
+          )
+        const body = await response.json()
+
+        assert.equal(response.status, 504)
+        assert.equal(body.code, 'AI_TIMEOUT')
+        assert.deepEqual(observedDelays, [20_000])
+        assert.equal(fetchCount, 2)
+      } finally {
+        globalThis.fetch = originalFetch
+        globalThis.setTimeout = originalSetTimeout
+        globalThis.clearTimeout = originalClearTimeout
+      }
     },
   )
 
@@ -3910,6 +5255,123 @@ try {
 
       assert.equal(response.status, 200)
       assert.equal(parsed?.length, 3)
+    },
+  )
+
+  await check(
+    'Sprint S1 QA: 동일 AI 추천은 진행 중·30초 캐시에서 한 번만 호출',
+    async () => {
+      const originalWindow = globalThis.window
+      globalThis.window = {
+        setTimeout,
+        clearTimeout,
+      }
+      let fetchCount = 0
+      const request = {
+        inventoryItems: [
+          {
+            name: 'S1 중복 방지 계란',
+            quantity: 2,
+            unit: '개',
+          },
+        ],
+        servings: 2,
+      }
+      const fetcher = async (_url, options) => {
+        fetchCount += 1
+        return handleAiRecipeRecommendation(
+          new Request(
+            'http://localhost/api/ai/recipe-recommendation',
+            options,
+          ),
+          {
+            HOMEOS_AI_MOCK: 'true',
+            NODE_ENV: 'development',
+          },
+        )
+      }
+
+      try {
+        const [first, second] = await Promise.all([
+          requestAiRecipeRecommendations(
+            request,
+            fetcher,
+          ),
+          requestAiRecipeRecommendations(
+            request,
+            fetcher,
+          ),
+        ])
+        const cached =
+          await requestAiRecipeRecommendations(
+            request,
+            fetcher,
+          )
+
+        assert.equal(fetchCount, 1)
+        assert.equal(first.recommendations.length, 3)
+        assert.deepEqual(second, first)
+        assert.deepEqual(cached, first)
+      } finally {
+        globalThis.window = originalWindow
+      }
+    },
+  )
+
+  await check(
+    'Sprint S1 QA: 오프라인 연결 실패를 사용자 오류로 변환하고 재호출 상태를 정리',
+    async () => {
+      const originalWindow = globalThis.window
+      globalThis.window = {
+        setTimeout,
+        clearTimeout,
+      }
+      const request = {
+        inventoryItems: [
+          {
+            name: 'S1 오프라인 두부',
+            quantity: 1,
+            unit: '모',
+          },
+        ],
+        servings: 2,
+      }
+
+      try {
+        await assert.rejects(
+          requestAiRecipeRecommendations(
+            request,
+            async () => {
+              throw new TypeError('offline')
+            },
+          ),
+          (error) =>
+            error?.code === 'AI_REQUEST_FAILED',
+        )
+
+        const recovered =
+          await requestAiRecipeRecommendations(
+            request,
+            async (_url, options) =>
+              handleAiRecipeRecommendation(
+                new Request(
+                  'http://localhost/api/ai/recipe-recommendation',
+                  options,
+                ),
+                {
+                  HOMEOS_AI_MOCK: 'true',
+                  NODE_ENV: 'development',
+                },
+              ),
+          )
+
+        assert.equal(
+          recovered.recommendations.length,
+          3,
+        )
+      } finally {
+        globalThis.window = originalWindow
+      }
     },
   )
 
@@ -4133,7 +5595,7 @@ try {
   )
 
   await check(
-    '식단 장보기: 같은 재료 합산·냉장고 차감·기본 조미료 제외',
+    'S5.1 식단 장보기: 냉장고 차감 유지·물만 제외',
     () => {
       const plans = createDefaultMonthlyMealPlans(
         '2026-08-01',
@@ -4186,11 +5648,47 @@ try {
       )
       assert.equal(
         result.ingredients.some((ingredient) =>
-          ['물', '소금', '식용유', '후추', '설탕'].includes(
-            ingredient.name,
-          ),
+          isWaterIngredientName(ingredient.name),
         ),
         false,
+      )
+
+      const policyRecipe = {
+        id: 's5-1-shopping-policy',
+        name: 'S5.1 장보기 정책 테스트',
+        servings: 2,
+        ingredients: [
+          { id: 'water', name: '물', quantity: 600, unit: 'ml' },
+          { id: 'pepper', name: '후추', quantity: 1, unit: 'g' },
+          { id: 'salt', name: '소금', quantity: 5, unit: 'g' },
+          { id: 'sugar', name: '설탕', quantity: 5, unit: 'g' },
+        ],
+      }
+      const policyPlan = {
+        id: 's5-1-plan',
+        date: '2026-08-01',
+        type: 'dinner',
+        status: 'planned',
+        name: policyRecipe.name,
+        recipeId: policyRecipe.id,
+        servings: 2,
+        createdAt: '2026-08-01T00:00:00.000Z',
+        updatedAt: '2026-08-01T00:00:00.000Z',
+      }
+      const policyResult =
+        createMealPlanShoppingIngredients(
+          [policyPlan],
+          [policyRecipe],
+          [],
+          '2026-08-01',
+          'today',
+        )
+
+      assert.deepEqual(
+        policyResult.ingredients.map(
+          (ingredient) => ingredient.name,
+        ),
+        ['후추', '소금', '설탕'],
       )
     },
   )
@@ -5495,6 +6993,2750 @@ try {
       assert.doesNotMatch(
         appSource,
         /window\.close\(/,
+      )
+    },
+  )
+
+  await check(
+    'Auth foundation: Google sub와 내부 user id를 분리하고 세션을 안전하게 파싱',
+    () => {
+      const now = '2026-07-31T00:00:00.000Z'
+      const session = parseAuthSession({
+        status: 'authenticated',
+        deviceId: 'device-internal-id',
+        expiresAt: '2026-08-01T00:00:00.000Z',
+        user: {
+          id: 'user-internal-id',
+          provider: 'google',
+          providerSubject: 'google-subject-id',
+          email: 'user@example.com',
+          emailVerified: true,
+          displayName: '오늘식탁 사용자',
+          createdAt: now,
+          updatedAt: now,
+        },
+      })
+
+      assert.equal(
+        isAuthenticatedSession(session),
+        true,
+      )
+      assert.equal(
+        session.status === 'authenticated'
+          ? session.user.id
+          : null,
+        'user-internal-id',
+      )
+      assert.equal(
+        session.status === 'authenticated'
+          ? session.user.providerSubject
+          : null,
+        'google-subject-id',
+      )
+      const apiSession = parseAuthSession({
+        authenticated: true,
+        deviceId: 'device-internal-id',
+        expiresAt: '2026-08-01T00:00:00.000Z',
+        user: {
+          id: 'user-internal-id',
+          provider: 'google',
+          email: 'user@example.com',
+          emailVerified: true,
+          displayName: '오늘식탁 사용자',
+          createdAt: now,
+          updatedAt: now,
+        },
+      })
+      assert.equal(
+        apiSession.status,
+        'authenticated',
+      )
+      assert.deepEqual(
+        parseAuthSession({ authenticated: false }),
+        createAnonymousAuthSession(),
+      )
+      assert.deepEqual(
+        parseAuthSession({ status: 'authenticated' }),
+        createAnonymousAuthSession(),
+      )
+    },
+  )
+
+  await check(
+    'Auth foundation: 외부 return URL을 거부하고 앱 내부 로그인 경로만 생성',
+    () => {
+      assert.equal(
+        normalizeAuthReturnTo(
+          'https://example.com/redirect',
+        ),
+        '/',
+      )
+      assert.equal(
+        normalizeAuthReturnTo('//example.com'),
+        '/',
+      )
+      assert.equal(
+        createGoogleSignInPath('/meal-plan'),
+        '/api/auth/google/start?returnTo=%2Fmeal-plan',
+      )
+    },
+  )
+
+  await check(
+    'Auth integration: OAuth transaction을 암호화하고 state·nonce·PKCE S256을 구성',
+    async () => {
+      const config = parseGoogleOAuthConfig({
+        GOOGLE_OAUTH_CLIENT_ID:
+          'client-id.apps.googleusercontent.com',
+        GOOGLE_OAUTH_CLIENT_SECRET:
+          'server-client-secret',
+        GOOGLE_OAUTH_REDIRECT_URI:
+          'https://today-table.test/api/auth/login',
+        AUTH_COOKIE_SECRET:
+          '0123456789abcdef0123456789abcdef',
+      })
+
+      assert.ok(config)
+
+      const transaction = createOAuthTransaction(
+        {
+          redirectUri: config.redirectUri,
+          returnTo: '/settings',
+        },
+        new Date(
+          '2026-07-31T00:00:00.000Z',
+        ),
+      )
+      const sealed = await sealOAuthTransaction(
+        transaction,
+        config.cookieSecret,
+      )
+      const opened = await openOAuthTransaction(
+        sealed,
+        config.cookieSecret,
+        new Date(
+          '2026-07-31T00:05:00.000Z',
+        ),
+      )
+      const challenge =
+        await createPkceCodeChallenge(
+          transaction.codeVerifier,
+        )
+      const authorizationUrl = new URL(
+        await createGoogleAuthorizationUrl(
+          config,
+          transaction,
+        ),
+      )
+
+      assert.deepEqual(opened, transaction)
+      assert.equal(
+        constantTimeEqual(
+          transaction.state,
+          transaction.state,
+        ),
+        true,
+      )
+      assert.equal(
+        constantTimeEqual(
+          transaction.state,
+          `${transaction.state}x`,
+        ),
+        false,
+      )
+      assert.equal(
+        authorizationUrl.searchParams.get(
+          'response_type',
+        ),
+        'code',
+      )
+      assert.equal(
+        authorizationUrl.searchParams.get(
+          'state',
+        ),
+        transaction.state,
+      )
+      assert.equal(
+        authorizationUrl.searchParams.get(
+          'nonce',
+        ),
+        transaction.nonce,
+      )
+      assert.equal(
+        authorizationUrl.searchParams.get(
+          'code_challenge',
+        ),
+        challenge,
+      )
+      assert.equal(
+        authorizationUrl.searchParams.get(
+          'code_challenge_method',
+        ),
+        'S256',
+      )
+      assert.equal(
+        await openOAuthTransaction(
+          `${sealed}tampered`,
+          config.cookieSecret,
+        ),
+        null,
+      )
+      const tokenResponse =
+        await exchangeGoogleAuthorizationCode({
+          code: 'authorization-code',
+          transaction,
+          config,
+          fetcher: async (url, request) => {
+            assert.equal(
+              String(url),
+              'https://oauth2.googleapis.com/token',
+            )
+            const body = new URLSearchParams(
+              request.body,
+            )
+            assert.equal(
+              body.get('code_verifier'),
+              transaction.codeVerifier,
+            )
+            assert.equal(
+              body.get('redirect_uri'),
+              config.redirectUri,
+            )
+
+            return Response.json({
+              id_token: 'header.payload.signature',
+            })
+          },
+        })
+
+      assert.equal(
+        tokenResponse.idToken,
+        'header.payload.signature',
+      )
+    },
+  )
+
+  await check(
+    'Auth integration: Google JWK 서명과 iss·aud·exp·nonce·email_verified를 검증',
+    async () => {
+      clearGoogleJwksCacheForTests()
+      const keyPair =
+        await crypto.subtle.generateKey(
+          {
+            name: 'RSASSA-PKCS1-v1_5',
+            modulusLength: 2048,
+            publicExponent: new Uint8Array([
+              1, 0, 1,
+            ]),
+            hash: 'SHA-256',
+          },
+          true,
+          ['sign', 'verify'],
+        )
+      const publicJwk =
+        await crypto.subtle.exportKey(
+          'jwk',
+          keyPair.publicKey,
+        )
+      const encodePart = (value) =>
+        Buffer.from(
+          JSON.stringify(value),
+        ).toString('base64url')
+      const header = encodePart({
+        alg: 'RS256',
+        kid: 'google-test-key',
+        typ: 'JWT',
+      })
+      const claims = encodePart({
+        iss: 'https://accounts.google.com',
+        sub: 'google-subject-123',
+        aud: 'client-id.apps.googleusercontent.com',
+        exp: 1785463200,
+        iat: 1785456000,
+        nonce: 'expected-nonce',
+        email: 'tester@example.com',
+        email_verified: true,
+        name: '테스트 사용자',
+      })
+      const signingInput = `${header}.${claims}`
+      const signature = await crypto.subtle.sign(
+        'RSASSA-PKCS1-v1_5',
+        keyPair.privateKey,
+        new TextEncoder().encode(signingInput),
+      )
+      const idToken = `${signingInput}.${Buffer.from(
+        signature,
+      ).toString('base64url')}`
+      const jwksFetcher = async () =>
+        new Response(
+          JSON.stringify({
+            keys: [
+              {
+                ...publicJwk,
+                kid: 'google-test-key',
+                alg: 'RS256',
+                use: 'sig',
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'max-age=3600',
+            },
+          },
+        )
+      const verified = await verifyGoogleIdToken(
+        idToken,
+        {
+          clientId:
+            'client-id.apps.googleusercontent.com',
+          nonce: 'expected-nonce',
+          now: new Date(
+            '2026-07-31T00:00:00.000Z',
+          ),
+          fetcher: jwksFetcher,
+        },
+      )
+
+      assert.equal(
+        verified.identity.subject,
+        'google-subject-123',
+      )
+      assert.equal(
+        verified.identity.emailVerified,
+        true,
+      )
+      await assert.rejects(
+        verifyGoogleIdToken(idToken, {
+          clientId:
+            'client-id.apps.googleusercontent.com',
+          nonce: 'wrong-nonce',
+          now: new Date(
+            '2026-07-31T00:00:00.000Z',
+          ),
+          fetcher: jwksFetcher,
+        }),
+        /GOOGLE_ID_TOKEN_CLAIMS_INVALID/,
+      )
+    },
+  )
+
+  await check(
+    'Auth integration: login endpoint는 서버 설정 전 닫히고 설정 후 Google code flow로 이동',
+    async () => {
+      const unconfigured =
+        await handleGoogleAuthRoute(
+          new Request(
+            'https://today-table.test/api/auth/login',
+          ),
+          {},
+          null,
+        )
+      const configured =
+        await handleGoogleAuthRoute(
+          new Request(
+            'https://today-table.test/api/auth/login?returnTo=%2Fsettings',
+          ),
+          {
+            GOOGLE_OAUTH_CLIENT_ID:
+              'client-id.apps.googleusercontent.com',
+            GOOGLE_OAUTH_CLIENT_SECRET:
+              'server-client-secret',
+            GOOGLE_OAUTH_REDIRECT_URI:
+              'https://today-table.test/api/auth/login',
+            AUTH_COOKIE_SECRET:
+              '0123456789abcdef0123456789abcdef',
+          },
+          {},
+          {
+            now: () =>
+              new Date(
+                '2026-07-31T00:00:00.000Z',
+              ),
+          },
+        )
+      const location = new URL(
+        configured.headers.get('location'),
+      )
+      const setCookie =
+        configured.headers.get('set-cookie')
+
+      assert.equal(unconfigured.status, 503)
+      assert.equal(configured.status, 302)
+      assert.equal(
+        location.origin,
+        'https://accounts.google.com',
+      )
+      assert.equal(
+        location.searchParams.get(
+          'redirect_uri',
+        ),
+        'https://today-table.test/api/auth/login',
+      )
+      assert.match(setCookie, /HttpOnly/)
+      assert.match(setCookie, /Secure/)
+      assert.match(setCookie, /SameSite=Lax/)
+    },
+  )
+
+  await check(
+    'Auth integration: sub 기준 재로그인·기기 변경·세션 복원·로그아웃에도 Trial을 재발급하지 않음',
+    async () => {
+      const users = new Map()
+      const devices = new Map()
+      const sessions = new Map()
+      const entitlements = new Map()
+      let idSequence = 0
+      const repository = {
+        async findUserById(userId) {
+          return users.get(userId) ?? null
+        },
+        async findUserByGoogleSubject(subject) {
+          return (
+            [...users.values()].find(
+              (user) =>
+                user.googleSubject === subject,
+            ) ?? null
+          )
+        },
+        async saveUser(user) {
+          const existing =
+            [...users.values()].find(
+              (candidate) =>
+                candidate.googleSubject ===
+                user.googleSubject,
+            )
+          const saved = existing
+            ? {
+                ...user,
+                id: existing.id,
+                createdAt: existing.createdAt,
+              }
+            : user
+          users.set(saved.id, saved)
+          return saved
+        },
+        async findDevice(userId, deviceKey) {
+          return (
+            [...devices.values()].find(
+              (device) =>
+                device.userId === userId &&
+                device.deviceKey === deviceKey,
+            ) ?? null
+          )
+        },
+        async saveDevice(device) {
+          devices.set(device.id, device)
+          return device
+        },
+        async findSessionByTokenHash(tokenHash) {
+          return (
+            [...sessions.values()].find(
+              (session) =>
+                session.tokenHash === tokenHash,
+            ) ?? null
+          )
+        },
+        async saveSession(session) {
+          sessions.set(session.id, session)
+          return session
+        },
+        async revokeSession(sessionId, revokedAt) {
+          const session = sessions.get(sessionId)
+
+          if (session) {
+            sessions.set(sessionId, {
+              ...session,
+              revokedAt,
+            })
+          }
+        },
+        async findEntitlement(userId) {
+          return entitlements.get(userId) ?? null
+        },
+        async saveEntitlement(
+          entitlement,
+          expectedVersion,
+        ) {
+          const current = entitlements.get(
+            entitlement.userId,
+          )
+
+          if (
+            (current?.version ?? null) !==
+            expectedVersion
+          ) {
+            throw new Error(
+              'ENTITLEMENT_VERSION_CONFLICT',
+            )
+          }
+
+          entitlements.set(
+            entitlement.userId,
+            entitlement,
+          )
+          return entitlement
+        },
+        async findAccountSnapshot() {
+          return null
+        },
+        async saveAccountSnapshot(snapshot) {
+          return snapshot
+        },
+      }
+      const dependencies = {
+        repository,
+        async verifyGoogleAuthorizationCode() {
+          throw new Error('not used')
+        },
+        now: () =>
+          new Date(
+            '2026-07-31T00:00:00.000Z',
+          ),
+        createId(prefix) {
+          idSequence += 1
+          return `${prefix}-${idSequence}`
+        },
+      }
+      const identity = {
+        subject: 'google-subject-123',
+        email: 'tester@example.com',
+        emailVerified: true,
+        displayName: '테스트 사용자',
+      }
+      const first =
+        await establishVerifiedGoogleSession(
+          {
+            identity,
+            deviceKey:
+              'device-key-aaaaaaaaaaaaaaaaaaaaa',
+          },
+          dependencies,
+        )
+      const second =
+        await establishVerifiedGoogleSession(
+          {
+            identity,
+            deviceKey:
+              'device-key-bbbbbbbbbbbbbbbbbbbbb',
+          },
+          dependencies,
+        )
+      const trial = entitlements.get(
+        first.user.id,
+      )
+      const sessionResponse =
+        await handleAuthSession(
+          new Request(
+            'https://today-table.test/api/auth/session',
+            {
+              headers: {
+                Cookie: `${SERVER_SESSION_COOKIE_NAME}=${second.token}`,
+              },
+            },
+          ),
+          dependencies,
+        )
+      const sessionPayload =
+        await sessionResponse.json()
+      const logoutResponse =
+        await handleAuthLogout(
+          new Request(
+            'https://today-table.test/api/auth/logout',
+            {
+              method: 'POST',
+              headers: {
+                Cookie: `${SERVER_SESSION_COOKIE_NAME}=${second.token}`,
+              },
+            },
+          ),
+          dependencies,
+        )
+
+      assert.equal(users.size, 1)
+      assert.equal(devices.size, 2)
+      assert.equal(
+        first.user.id,
+        second.user.id,
+      )
+      assert.equal(trial.plan, 'TRIAL')
+      assert.equal(
+        trial.trialStartedAt,
+        '2026-07-31T00:00:00.000Z',
+      )
+      assert.equal(
+        trial.trialConsumedAt,
+        trial.trialStartedAt,
+      )
+      assert.equal(sessionResponse.status, 200)
+      assert.equal(
+        sessionPayload.authenticated,
+        true,
+      )
+      assert.equal(
+        sessionPayload.deviceId,
+        second.session.deviceId,
+      )
+      assert.equal(logoutResponse.status, 200)
+      assert.ok(
+        sessions.get(second.session.id).revokedAt,
+      )
+    },
+  )
+
+  await check(
+    'Account sync integration: 계정 데이터만 snapshot으로 병합하고 tombstone을 적용',
+    () => {
+      const values = new Map([
+        [
+          'homeos.inventory',
+          JSON.stringify([
+            {
+              id: 'onion',
+              updatedAt:
+                '2026-07-31T00:00:00.000Z',
+            },
+          ]),
+        ],
+        [
+          'today-table.tutorial-settings.v1',
+          '{"completed":true}',
+        ],
+        [
+          'today-table.ai-access.v1',
+          '{"plan":"PREMIUM"}',
+        ],
+        [
+          AI_RECIPE_STORAGE_KEY,
+          JSON.stringify([
+            {
+              id: 'ai-recipe-sync',
+              updatedAt:
+                '2026-07-31T00:30:00.000Z',
+            },
+          ]),
+        ],
+      ])
+      const storage = {
+        get length() {
+          return values.size
+        },
+        key(index) {
+          return [...values.keys()][index] ?? null
+        },
+        getItem(key) {
+          return values.get(key) ?? null
+        },
+        setItem(key, value) {
+          values.set(key, value)
+        },
+        removeItem(key) {
+          values.delete(key)
+        },
+      }
+      const local = captureAccountSyncSnapshot(
+        storage,
+        '2026-07-31T01:00:00.000Z',
+      )
+      const remote = {
+        formatVersion: '1.0',
+        capturedAt:
+          '2026-07-30T00:00:00.000Z',
+        entries: [
+          {
+            key: 'homeos.inventory',
+            value: JSON.stringify([
+              {
+                id: 'potato',
+                updatedAt:
+                  '2026-07-30T12:00:00.000Z',
+              },
+            ]),
+            updatedAt:
+              '2026-07-30T12:00:00.000Z',
+            deletedAt: null,
+          },
+          {
+            key: 'homeos.shopping.items',
+            value: '[]',
+            updatedAt:
+              '2026-07-30T00:00:00.000Z',
+            deletedAt: null,
+          },
+          {
+            key: 'homeos.mealPlan.items',
+            value: null,
+            updatedAt:
+              '2026-07-29T00:00:00.000Z',
+            deletedAt:
+              '2026-07-31T02:00:00.000Z',
+          },
+        ],
+      }
+      const merged = mergeAccountSyncSnapshots(
+        local,
+        remote,
+        '2026-07-31T03:00:00.000Z',
+      )
+
+      assert.equal(
+        local.entries.some(
+          (entry) =>
+            entry.key ===
+            'today-table.tutorial-settings.v1',
+        ),
+        false,
+      )
+      assert.equal(
+        local.entries.some(
+          (entry) =>
+            entry.key ===
+            'today-table.ai-access.v1',
+        ),
+        false,
+      )
+      assert.equal(
+        local.entries.some(
+          (entry) =>
+            entry.key === AI_RECIPE_STORAGE_KEY,
+        ),
+        true,
+      )
+      assert.ok(parseAccountSyncSnapshot(merged))
+      assert.equal(
+        JSON.parse(
+          merged.entries.find(
+            (entry) =>
+              entry.key === 'homeos.inventory',
+          ).value,
+        ).length,
+        2,
+      )
+      values.set('homeos.mealPlan.items', '[]')
+      assert.equal(
+        applyAccountSyncSnapshot(
+          storage,
+          merged,
+        ),
+        true,
+      )
+      assert.equal(
+        values.has('homeos.mealPlan.items'),
+        false,
+      )
+      assert.equal(
+        values.get('homeos.shopping.items'),
+        '[]',
+      )
+    },
+  )
+
+  await check(
+    'P4.2 Account Sync: rapid edits debounce to one upload with the final value',
+    async () => {
+      const { storage, values } =
+        createAccountSyncTestStorage()
+      const scheduledTimers = new Map()
+      let timerSequence = 0
+      const uploadedQuantities = []
+      const scheduler = createAccountSyncScheduler({
+        setTimer(callback, delay) {
+          const timerId = ++timerSequence
+          scheduledTimers.set(timerId, {
+            callback,
+            delay,
+          })
+          return timerId
+        },
+        clearTimer(timerId) {
+          scheduledTimers.delete(timerId)
+        },
+        sync: async (identity) => {
+          uploadedQuantities.push(
+            JSON.parse(
+              identity.storage.getItem(
+                'homeos.inventory',
+              ),
+            )[0].quantity,
+          )
+          return {
+            changed: false,
+            revision: uploadedQuantities.length,
+            changedKeys: [],
+            pendingLocalChanges: false,
+          }
+        },
+      })
+
+      scheduler.setIdentity({
+        storage,
+        userId: 'user-a',
+        deviceId: 'device-a',
+      })
+
+      ;[0.8, 0.9, 1].forEach(
+        (quantity, index) => {
+          values.set(
+            'homeos.inventory',
+            JSON.stringify([
+              {
+                id: 'inventory-onion',
+                name: 'onion',
+                quantity,
+                unit: 'item',
+                updatedAt: `2026-08-03T09:00:0${index}.000Z`,
+              },
+            ]),
+          )
+          scheduler.schedule()
+        },
+      )
+
+      assert.equal(ACCOUNT_SYNC_DEBOUNCE_MS, 750)
+      assert.equal(scheduledTimers.size, 1)
+      assert.equal(
+        [...scheduledTimers.values()][0].delay,
+        ACCOUNT_SYNC_DEBOUNCE_MS,
+      )
+
+      await scheduler.flush()
+
+      assert.deepEqual(uploadedQuantities, [1])
+      assert.equal(scheduler.getState().pending, false)
+
+      scheduler.schedule()
+      await scheduler.flush()
+      assert.deepEqual(uploadedQuantities, [1])
+    },
+  )
+
+  await check(
+    'P4.2 Account Sync: an edit during upload creates exactly one follow-up sync',
+    async () => {
+      const { storage, values } =
+        createAccountSyncTestStorage([
+          [
+            'homeos.inventory',
+            JSON.stringify([
+              {
+                id: 'inventory-onion',
+                quantity: 0.5,
+                updatedAt:
+                  '2026-08-03T09:10:00.000Z',
+              },
+            ]),
+          ],
+        ])
+      let resolveFirstSync
+      const uploadedQuantities = []
+      const scheduler = createAccountSyncScheduler({
+        sync: async (identity) => {
+          uploadedQuantities.push(
+            JSON.parse(
+              identity.storage.getItem(
+                'homeos.inventory',
+              ),
+            )[0].quantity,
+          )
+
+          if (uploadedQuantities.length === 1) {
+            await new Promise((resolve) => {
+              resolveFirstSync = resolve
+            })
+          }
+
+          return {
+            changed: false,
+            revision: uploadedQuantities.length,
+            changedKeys: [],
+            pendingLocalChanges: false,
+          }
+        },
+      })
+
+      scheduler.setIdentity({
+        storage,
+        userId: 'user-a',
+        deviceId: 'device-a',
+      })
+
+      const firstSync = scheduler.flush({ force: true })
+      await Promise.resolve()
+      values.set(
+        'homeos.inventory',
+        JSON.stringify([
+          {
+            id: 'inventory-onion',
+            quantity: 0.75,
+            updatedAt:
+              '2026-08-03T09:11:00.000Z',
+          },
+        ]),
+      )
+      scheduler.schedule()
+      resolveFirstSync()
+      await firstSync
+
+      assert.equal(scheduler.getState().pending, true)
+      await scheduler.flush()
+
+      assert.deepEqual(uploadedQuantities, [0.5, 0.75])
+      assert.equal(scheduler.getState().pending, false)
+    },
+  )
+
+  await check(
+    'P4.2 Account Sync: offline and failed uploads remain pending until retry succeeds',
+    async () => {
+      const { storage, values } =
+        createAccountSyncTestStorage([
+          [
+            'homeos.inventory',
+            '[{"id":"inventory-onion","quantity":0.75,"updatedAt":"2026-08-03T09:20:00.000Z"}]',
+          ],
+        ])
+      let online = false
+      let shouldFail = true
+      let syncCalls = 0
+      const scheduler = createAccountSyncScheduler({
+        isOnline: () => online,
+        sync: async () => {
+          syncCalls += 1
+
+          if (shouldFail) {
+            throw new Error('ACCOUNT_SYNC_FAILED')
+          }
+
+          return {
+            changed: false,
+            revision: 2,
+            changedKeys: [],
+            pendingLocalChanges: false,
+          }
+        },
+      })
+
+      scheduler.setIdentity({
+        storage,
+        userId: 'user-a',
+        deviceId: 'device-a',
+      })
+      scheduler.schedule()
+
+      assert.equal(syncCalls, 0)
+      assert.equal(scheduler.getState().pending, true)
+      assert.equal(
+        JSON.parse(
+          values.get(ACCOUNT_SYNC_METADATA_STORAGE_KEY),
+        ).pendingChanges,
+        1,
+      )
+
+      online = true
+      await assert.rejects(
+        scheduler.flush(),
+        /ACCOUNT_SYNC_FAILED/,
+      )
+      assert.equal(scheduler.getState().pending, true)
+
+      shouldFail = false
+      await scheduler.flush()
+
+      assert.equal(syncCalls, 2)
+      assert.equal(scheduler.getState().pending, false)
+    },
+  )
+
+  await check(
+    'P4.2 Account Sync: logout and account changes cancel or block the previous identity',
+    async () => {
+      const { storage } = createAccountSyncTestStorage([
+        [
+          ACCOUNT_SYNC_METADATA_STORAGE_KEY,
+          JSON.stringify({
+            formatVersion: '1.0',
+            userId: 'user-a',
+            deviceId: 'device-a',
+            serverRevision: 7,
+            lastSyncedAt:
+              '2026-08-03T09:30:00.000Z',
+            pendingChanges: 1,
+            syncedKeys: {},
+            deletedKeys: [],
+            syncedValueHashes: {},
+          }),
+        ],
+      ])
+      let syncCalls = 0
+      const scheduler = createAccountSyncScheduler({
+        sync: async () => {
+          syncCalls += 1
+          return {
+            changed: false,
+            revision: 8,
+            changedKeys: [],
+            pendingLocalChanges: false,
+          }
+        },
+      })
+
+      scheduler.setIdentity({
+        storage,
+        userId: 'user-b',
+        deviceId: 'device-b',
+      })
+
+      assert.equal(
+        scheduler.getState().blockedByAccountMismatch,
+        true,
+      )
+      await assert.rejects(
+        scheduler.flush(),
+        /ACCOUNT_SYNC_USER_MISMATCH/,
+      )
+      assert.equal(syncCalls, 0)
+
+      scheduler.cancel()
+      assert.deepEqual(scheduler.getState(), {
+        hasIdentity: false,
+        pending: false,
+        inFlight: false,
+        blockedByAccountMismatch: false,
+      })
+    },
+  )
+
+  await check(
+    'P4.2 Account Sync: an in-flight local edit survives the server response and stays pending',
+    async () => {
+      const { storage, values } =
+        createAccountSyncTestStorage([
+          [
+            'homeos.inventory',
+            '[{"id":"inventory-onion","quantity":0.5,"updatedAt":"2026-08-03T09:40:00.000Z"}]',
+          ],
+        ])
+      let requestSnapshot
+      let releaseResponse
+      const fetcher = async (_url, init) => {
+        requestSnapshot = JSON.parse(init.body).snapshot
+        await new Promise((resolve) => {
+          releaseResponse = resolve
+        })
+        return new Response(
+          JSON.stringify({
+            revision: 11,
+            snapshot: requestSnapshot,
+            syncedAt:
+              '2026-08-03T09:40:30.000Z',
+          }),
+          {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          },
+        )
+      }
+
+      const syncPromise = syncAccountStorage({
+        storage,
+        userId: 'user-a',
+        deviceId: 'device-a',
+        fetcher,
+      })
+      await Promise.resolve()
+      values.set(
+        'homeos.inventory',
+        '[{"id":"inventory-onion","quantity":0.75,"updatedAt":"2026-08-03T09:41:00.000Z"}]',
+      )
+      releaseResponse()
+
+      const result = await syncPromise
+
+      assert.equal(result.pendingLocalChanges, true)
+      assert.equal(
+        JSON.parse(values.get('homeos.inventory'))[0]
+          .quantity,
+        0.75,
+      )
+    },
+  )
+
+  await check(
+    'P4.2 Account Sync: all account snapshot domains use the common scheduler',
+    () => {
+      ;[
+        'homeos:inventory-changed',
+        'homeos:shopping-changed',
+        'homeos:meal-plan-changed',
+        'homeos:recipes-changed',
+        'today-table:ai-recipes-changed',
+        'today-table:measurement-tools-changed',
+      ].forEach((eventName) => {
+        assert.ok(
+          ACCOUNT_SYNC_MUTATION_EVENTS.includes(eventName),
+          `${eventName} must schedule account sync`,
+        )
+      })
+    },
+  )
+
+  await check(
+    'P4.4 Account Sync: a revision-based deletion becomes a record tombstone and cannot be resurrected',
+    () => {
+      const remoteSnapshot = {
+        formatVersion: '1.0',
+        capturedAt: '2026-08-03T10:00:00.000Z',
+        entries: [
+          {
+            key: 'homeos.inventory',
+            value: JSON.stringify([
+              {
+                id: 'old-onion',
+                quantity: 1,
+                updatedAt:
+                  '2026-08-03T10:00:00.000Z',
+              },
+              {
+                id: 'old-potato',
+                quantity: 1,
+                updatedAt:
+                  '2026-08-03T10:00:00.000Z',
+              },
+              {
+                id: 'old-carrot',
+                quantity: 1,
+                updatedAt:
+                  '2026-08-03T10:00:00.000Z',
+              },
+            ]),
+            updatedAt:
+              '2026-08-03T10:00:00.000Z',
+            deletedAt: null,
+          },
+        ],
+      }
+      const localAfterDelete = {
+        formatVersion: '1.0',
+        capturedAt: '2026-08-03T10:05:00.000Z',
+        entries: [
+          {
+            key: 'homeos.inventory',
+            value: JSON.stringify([
+              {
+                id: 'new-kimchi',
+                quantity: 1,
+                updatedAt:
+                  '2026-08-03T10:05:00.000Z',
+              },
+              {
+                id: 'new-tofu',
+                quantity: 1,
+                updatedAt:
+                  '2026-08-03T10:05:00.000Z',
+              },
+            ]),
+            updatedAt:
+              '2026-08-03T10:05:00.000Z',
+            deletedAt: null,
+          },
+        ],
+      }
+      const deletionAware =
+        addRecordDeletionTombstones(
+          localAfterDelete,
+          remoteSnapshot,
+          '2026-08-03T10:05:30.000Z',
+        )
+      const deletedRecords = JSON.parse(
+        deletionAware.entries[0].value,
+      ).filter((record) => record.deletedAt)
+
+      assert.equal(deletedRecords.length, 3)
+      assert.deepEqual(
+        deletedRecords.map((record) => record.id).sort(),
+        ['old-carrot', 'old-onion', 'old-potato'],
+      )
+
+      const serverSnapshot = mergeAccountSyncSnapshots(
+        deletionAware,
+        remoteSnapshot,
+        '2026-08-03T10:05:30.000Z',
+      )
+      const staleDeviceResult =
+        mergeAccountSyncSnapshots(
+          remoteSnapshot,
+          serverSnapshot,
+          '2026-08-03T10:06:00.000Z',
+        )
+      const { storage, values } =
+        createAccountSyncTestStorage([
+          ['homeos.inventory', remoteSnapshot.entries[0].value],
+        ])
+
+      applyAccountSyncSnapshot(storage, staleDeviceResult)
+
+      assert.deepEqual(
+        JSON.parse(values.get('homeos.inventory'))
+          .map((record) => record.id)
+          .sort(),
+        ['new-kimchi', 'new-tofu'],
+      )
+    },
+  )
+
+  await check(
+    'P4.4 Account Sync: delete POST persists to the server and stays deleted on another device and relaunch',
+    async () => {
+      const initialRecords = [
+        {
+          id: 'old-onion',
+          quantity: 1,
+          updatedAt: '2026-08-03T11:00:00.000Z',
+        },
+        {
+          id: 'old-potato',
+          quantity: 1,
+          updatedAt: '2026-08-03T11:00:00.000Z',
+        },
+        {
+          id: 'old-carrot',
+          quantity: 1,
+          updatedAt: '2026-08-03T11:00:00.000Z',
+        },
+      ]
+      let serverRevision = 1
+      let serverSnapshot = {
+        formatVersion: '1.0',
+        capturedAt: '2026-08-03T11:00:00.000Z',
+        entries: [
+          {
+            key: 'homeos.inventory',
+            value: JSON.stringify(initialRecords),
+            updatedAt:
+              '2026-08-03T11:00:00.000Z',
+            deletedAt: null,
+          },
+        ],
+      }
+      let serverClock = 0
+      const fetcher = async (_url, init) => {
+        const request = JSON.parse(init.body)
+        const serverNow = `2026-08-03T11:0${++serverClock}:00.000Z`
+        const localSnapshot =
+          request.baseRevision === serverRevision
+            ? addRecordDeletionTombstones(
+                request.snapshot,
+                serverSnapshot,
+                serverNow,
+              )
+            : request.snapshot
+
+        serverSnapshot = mergeAccountSyncSnapshots(
+          localSnapshot,
+          serverSnapshot,
+          serverNow,
+        )
+        serverRevision += 1
+
+        return new Response(
+          JSON.stringify({
+            revision: serverRevision,
+            snapshot: serverSnapshot,
+            syncedAt: serverNow,
+          }),
+          {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          },
+        )
+      }
+      const deviceA = createAccountSyncTestStorage([
+        [
+          'homeos.inventory',
+          JSON.stringify(initialRecords),
+        ],
+      ])
+
+      await syncAccountStorage({
+        storage: deviceA.storage,
+        userId: 'user-delete-sync',
+        deviceId: 'device-a',
+        fetcher,
+      })
+      deviceA.values.set(
+        'homeos.inventory',
+        JSON.stringify([
+          {
+            id: 'new-kimchi',
+            quantity: 1,
+            updatedAt:
+              '2026-08-03T11:03:00.000Z',
+          },
+          {
+            id: 'new-tofu',
+            quantity: 1,
+            updatedAt:
+              '2026-08-03T11:03:00.000Z',
+          },
+        ]),
+      )
+
+      await syncAccountStorage({
+        storage: deviceA.storage,
+        userId: 'user-delete-sync',
+        deviceId: 'device-a',
+        fetcher,
+      })
+
+      const serverRecords = JSON.parse(
+        serverSnapshot.entries[0].value,
+      )
+      assert.equal(
+        serverRecords.filter((record) => record.deletedAt)
+          .length,
+        3,
+      )
+
+      const deviceB = createAccountSyncTestStorage([
+        [
+          'homeos.inventory',
+          JSON.stringify(initialRecords),
+        ],
+      ])
+      await syncAccountStorage({
+        storage: deviceB.storage,
+        userId: 'user-delete-sync',
+        deviceId: 'device-b',
+        fetcher,
+      })
+
+      assert.deepEqual(
+        JSON.parse(
+          deviceB.values.get('homeos.inventory'),
+        )
+          .map((record) => record.id)
+          .sort(),
+        ['new-kimchi', 'new-tofu'],
+      )
+
+      const relaunchedDevice =
+        createAccountSyncTestStorage()
+      await syncAccountStorage({
+        storage: relaunchedDevice.storage,
+        userId: 'user-delete-sync',
+        deviceId: 'device-b-relaunched',
+        fetcher,
+      })
+
+      assert.deepEqual(
+        JSON.parse(
+          relaunchedDevice.values.get(
+            'homeos.inventory',
+          ),
+        )
+          .map((record) => record.id)
+          .sort(),
+        ['new-kimchi', 'new-tofu'],
+      )
+      assert.equal(serverRevision, 5)
+    },
+  )
+
+  await check(
+    'P4.4 Account Sync: record tombstones cover inventory, shopping, Planner, and Recipe arrays',
+    () => {
+      ;[
+        'homeos.inventory',
+        'homeos.shopping.items',
+        'homeos.mealPlan.items',
+        'homeos.recipes.imported',
+        'today-table.aiRecipes.v1',
+      ].forEach((key) => {
+        const local = {
+          formatVersion: '1.0',
+          capturedAt: '2026-08-03T12:01:00.000Z',
+          entries: [
+            {
+              key,
+              value: '[]',
+              updatedAt:
+                '2026-08-03T12:01:00.000Z',
+              deletedAt: null,
+            },
+          ],
+        }
+        const remote = {
+          formatVersion: '1.0',
+          capturedAt: '2026-08-03T12:00:00.000Z',
+          entries: [
+            {
+              key,
+              value:
+                '[{"id":"record-1","updatedAt":"2026-08-03T12:00:00.000Z"}]',
+              updatedAt:
+                '2026-08-03T12:00:00.000Z',
+              deletedAt: null,
+            },
+          ],
+        }
+        const result = addRecordDeletionTombstones(
+          local,
+          remote,
+          '2026-08-03T12:02:00.000Z',
+        )
+        const records = JSON.parse(
+          result.entries[0].value,
+        )
+
+        assert.equal(records.length, 1)
+        assert.equal(records[0].id, 'record-1')
+        assert.equal(
+          records[0].deletedAt,
+          '2026-08-03T12:02:00.000Z',
+        )
+      })
+    },
+  )
+
+  await check(
+    'Auth integration: 오프라인 세션 복원 실패에도 기존 LocalStorage를 유지',
+    async () => {
+      const values = new Map([
+        ['homeos.inventory', '[{"id":"onion"}]'],
+      ])
+      const storage = {
+        get length() {
+          return values.size
+        },
+        key(index) {
+          return [...values.keys()][index] ?? null
+        },
+        getItem(key) {
+          return values.get(key) ?? null
+        },
+        setItem(key, value) {
+          values.set(key, value)
+        },
+        removeItem(key) {
+          values.delete(key)
+        },
+      }
+
+      resetAuthSessionCache()
+      const session = await restoreAuthSession({
+        storage,
+        fetcher: async () => {
+          throw new TypeError('offline')
+        },
+      })
+
+      assert.equal(session.status, 'anonymous')
+      assert.equal(
+        values.get('homeos.inventory'),
+        '[{"id":"onion"}]',
+      )
+    },
+  )
+
+  await check(
+    'Account sync foundation: 계정 데이터와 기기 전용 LocalStorage를 분리',
+    () => {
+      assert.equal(
+        classifyAccountStorageKey(
+          'homeos.inventory',
+        ).dataset,
+        'inventory',
+      )
+      assert.equal(
+        classifyAccountStorageKey(
+          'homeos.meal.2026-07-31.dinner',
+        ).dataset,
+        'meal',
+      )
+      assert.equal(
+        classifyAccountStorageKey(
+          'today-table.tutorial-settings.v1',
+        ).scope,
+        'device',
+      )
+      assert.equal(
+        classifyAccountStorageKey(
+          'unknown.local.key',
+        ).scope,
+        'unsupported',
+      )
+      assert.equal(
+        ACCOUNT_SYNC_METADATA_STORAGE_KEY,
+        'today-table.account-sync.v1',
+      )
+    },
+  )
+
+  await check(
+    'Account sync foundation: 최초 병합과 tombstone 최신 우선 규칙',
+    () => {
+      assert.equal(
+        chooseInitialAccountSyncStrategy(true, false),
+        'upload-local',
+      )
+      assert.equal(
+        chooseInitialAccountSyncStrategy(false, true),
+        'restore-remote',
+      )
+      assert.equal(
+        chooseInitialAccountSyncStrategy(true, true),
+        'merge',
+      )
+
+      const resolved = resolveLatestAccountSyncRecord(
+        {
+          id: 'inventory-onion',
+          value: { quantity: 2 },
+          updatedAt: '2026-07-30T00:00:00.000Z',
+        },
+        {
+          id: 'inventory-onion',
+          value: { quantity: 2 },
+          updatedAt: '2026-07-29T00:00:00.000Z',
+          deletedAt: '2026-07-31T00:00:00.000Z',
+        },
+      )
+
+      assert.equal(resolved.source, 'remote')
+      assert.equal(
+        resolved.record.deletedAt,
+        '2026-07-31T00:00:00.000Z',
+      )
+    },
+  )
+
+  await check(
+    'AI Access: 앱 최초 실행은 FREE이고 서버가 발급한 7일 TRIAL만 만료 처리',
+    () => {
+      const freeUsage =
+        createInitialAiAccessUsage()
+      const trialUsage =
+        createTrialAiAccessUsage(
+          '2026-07-31T00:00:00.000Z',
+        )
+
+      assert.equal(AI_TRIAL_DURATION_DAYS, 7)
+      assert.equal(freeUsage.plan, 'FREE')
+      assert.equal(freeUsage.trialStart, null)
+      assert.equal(trialUsage.plan, 'TRIAL')
+      assert.equal(
+        trialUsage.trialEnd,
+        '2026-08-07T00:00:00.000Z',
+      )
+      assert.equal(
+        getRemainingTrialDays(
+          trialUsage,
+          '2026-07-31T00:00:00.000Z',
+        ),
+        7,
+      )
+      assert.equal(
+        resolveAiAccessUsage(
+          trialUsage,
+          '2026-08-07T00:00:00.000Z',
+        ).plan,
+        'FREE',
+      )
+    },
+  )
+
+  await check(
+    'AI Access: FREE·TRIAL·PREMIUM 권한 API를 Billing과 독립 판정',
+    () => {
+      const trialUsage = createTrialAiAccessUsage(
+        '2026-07-31T00:00:00.000Z',
+      )
+      const freeUsage = {
+        ...trialUsage,
+        plan: 'FREE',
+      }
+      const premiumUsage = {
+        ...trialUsage,
+        plan: 'PREMIUM',
+      }
+
+      assert.equal(
+        canUseAI(
+          trialUsage,
+          '2026-08-01T00:00:00.000Z',
+        ),
+        true,
+      )
+      assert.equal(
+        canGenerateMealPlan(
+          freeUsage,
+          '2026-08-01T00:00:00.000Z',
+        ),
+        false,
+      )
+      assert.equal(
+        canGenerateRecipe(
+          premiumUsage,
+          '2026-08-10T00:00:00.000Z',
+        ),
+        true,
+      )
+      assert.equal(
+        getSubscriptionStatus(
+          premiumUsage,
+          '2026-08-10T00:00:00.000Z',
+        ).plan,
+        'PREMIUM',
+      )
+    },
+  )
+
+  await check(
+    'AI Usage: 성공한 생성만 기능별 count와 마지막 생성 시각을 기록',
+    () => {
+      const usage = createTrialAiAccessUsage(
+        '2026-07-31T00:00:00.000Z',
+      )
+      const firstRecord = recordAiGeneration(
+        usage,
+        'meal-plan',
+        '2026-08-01T12:00:00.000Z',
+      )
+      const recipeRecord = recordAiGeneration(
+        firstRecord.usage,
+        'recipe',
+        '2026-08-01T12:05:00.000Z',
+      )
+      const expiredRecord = recordAiGeneration(
+        recipeRecord.usage,
+        'recommendation',
+        '2026-08-08T00:00:00.000Z',
+      )
+
+      assert.equal(firstRecord.recorded, true)
+      assert.equal(
+        firstRecord.usage.mealPlanCount,
+        1,
+      )
+      assert.equal(
+        recipeRecord.usage.recipeCount,
+        1,
+      )
+      assert.equal(
+        recipeRecord.usage.recommendationCount,
+        0,
+      )
+      assert.equal(
+        recipeRecord.usage.lastGenerationAt,
+        '2026-08-01T12:05:00.000Z',
+      )
+      assert.equal(expiredRecord.recorded, false)
+      assert.equal(
+        expiredRecord.usage.mealPlanCount,
+        1,
+      )
+    },
+  )
+
+  await check(
+    'AI Access Storage: 새 key만 초기화하고 기존 AI 식단 체험 데이터를 보존',
+    () => {
+      const values = new Map([
+        [
+          'today-table.aiMealPlanTrial.v1',
+          '{"status":"completed"}',
+        ],
+        [
+          AI_ACCESS_STORAGE_KEY,
+          JSON.stringify({
+            formatVersion: '1.0',
+            trialStart:
+              '2026-07-31T00:00:00.000Z',
+            trialEnd:
+              '2026-08-07T00:00:00.000Z',
+            plan: 'TRIAL',
+            aiGenerationCount: 2,
+            lastGenerationAt:
+              '2026-07-31T12:00:00.000Z',
+          }),
+        ],
+      ])
+      const storage = {
+        getItem(key) {
+          return values.get(key) ?? null
+        },
+        setItem(key, value) {
+          values.set(key, value)
+        },
+      }
+      const now = new Date(
+        '2026-07-31T00:00:00.000Z',
+      )
+      const usage = initializeAiAccessUsage(
+        storage,
+        now,
+      )
+      const service = createLocalAiAccessService(
+        storage,
+        {
+          now: () => now,
+        },
+      )
+
+      assert.equal(usage.plan, 'TRIAL')
+      assert.equal(usage.formatVersion, '1.1')
+      assert.equal(usage.mealPlanCount, 2)
+      assert.equal(usage.recipeCount, 0)
+      assert.ok(values.has(AI_ACCESS_STORAGE_KEY))
+      assert.equal(
+        values.get(
+          'today-table.aiMealPlanTrial.v1',
+        ),
+        '{"status":"completed"}',
+      )
+      assert.equal(service.canUseAI(), true)
+      assert.equal(
+        service.getRemainingTrialDays(),
+        7,
+      )
+      service.recordGeneration('recommendation')
+      assert.equal(
+        parseAiAccessUsage(
+          JSON.parse(
+            values.get(AI_ACCESS_STORAGE_KEY),
+          ),
+        ).recommendationCount,
+        1,
+      )
+
+      const blankValues = new Map()
+      const blankStorage = {
+        getItem(key) {
+          return blankValues.get(key) ?? null
+        },
+        setItem(key, value) {
+          blankValues.set(key, value)
+        },
+      }
+
+      assert.equal(
+        initializeAiAccessUsage(
+          blankStorage,
+          now,
+        ).plan,
+        'FREE',
+      )
+    },
+  )
+
+  await check(
+    'Server Entitlement: Google 로그인 뒤 계정당 Trial을 한 번만 시작',
+    () => {
+      const base = createServerEntitlement(
+        'user-1',
+        '2026-07-31T00:00:00.000Z',
+      )
+      const first = startTrialAfterGoogleLogin(
+        base,
+        '2026-07-31T00:00:00.000Z',
+      )
+      const second = startTrialAfterGoogleLogin(
+        first.entitlement,
+        '2026-08-01T00:00:00.000Z',
+      )
+      const expired = resolveServerEntitlement(
+        first.entitlement,
+        '2026-08-07T00:00:00.000Z',
+      )
+
+      assert.equal(base.plan, 'FREE')
+      assert.equal(first.started, true)
+      assert.equal(
+        first.entitlement.plan,
+        'TRIAL',
+      )
+      assert.equal(second.started, false)
+      assert.equal(
+        second.entitlement.trialStartedAt,
+        '2026-07-31T00:00:00.000Z',
+      )
+      assert.equal(expired.plan, 'FREE')
+      assert.equal(
+        expired.trialConsumedAt,
+        '2026-07-31T00:00:00.000Z',
+      )
+      assert.equal(
+        startTrialAfterGoogleLogin(
+          expired,
+          '2026-08-08T00:00:00.000Z',
+        ).started,
+        false,
+      )
+    },
+  )
+
+  await check(
+    'Server Entitlement: AI 사용량을 식단·레시피·추천으로 독립 기록',
+    () => {
+      const trial = startTrialAfterGoogleLogin(
+        createServerEntitlement(
+          'user-1',
+          '2026-07-31T00:00:00.000Z',
+        ),
+        '2026-07-31T00:00:00.000Z',
+      ).entitlement
+      const mealPlan = recordServerAiGeneration(
+        trial,
+        'meal-plan',
+        '2026-08-01T00:00:00.000Z',
+      )
+      const recipe = recordServerAiGeneration(
+        mealPlan.entitlement,
+        'recipe',
+        '2026-08-01T00:01:00.000Z',
+      )
+      const recommendation =
+        recordServerAiGeneration(
+          recipe.entitlement,
+          'recommendation',
+          '2026-08-01T00:02:00.000Z',
+        )
+
+      assert.equal(mealPlan.recorded, true)
+      assert.deepEqual(
+        recommendation.entitlement.usage,
+        {
+          mealPlanCount: 1,
+          recipeCount: 1,
+          recommendationCount: 1,
+          lastGenerationAt:
+            '2026-08-01T00:02:00.000Z',
+        },
+      )
+    },
+  )
+
+  await check(
+    'Server Session: Secure HttpOnly cookie·30일 만료·24시간 회전 정책',
+    () => {
+      const session = createServerSession(
+        {
+          id: 'session-1',
+          userId: 'user-1',
+          deviceId: 'device-1',
+          tokenHash: 'hashed-token',
+        },
+        '2026-07-31T00:00:00.000Z',
+      )
+      const cookie =
+        createSessionCookie('opaque-token')
+
+      assert.equal(
+        SERVER_SESSION_COOKIE_NAME,
+        '__Host-today_table_session',
+      )
+      assert.equal(
+        SERVER_SESSION_DURATION_MS,
+        30 * 24 * 60 * 60 * 1_000,
+      )
+      assert.equal(
+        SERVER_SESSION_ROTATION_MS,
+        24 * 60 * 60 * 1_000,
+      )
+      assert.match(cookie, /HttpOnly/)
+      assert.match(cookie, /Secure/)
+      assert.match(cookie, /SameSite=Lax/)
+      assert.equal(
+        readSessionToken(cookie),
+        'opaque-token',
+      )
+      assert.equal(
+        isServerSessionActive(
+          session,
+          '2026-08-01T00:00:00.000Z',
+        ),
+        true,
+      )
+      assert.equal(
+        shouldRotateServerSession(
+          session,
+          '2026-08-01T00:00:00.000Z',
+        ),
+        true,
+      )
+      assert.match(
+        createExpiredSessionCookie(),
+        /Max-Age=0/,
+      )
+    },
+  )
+
+  await check(
+    'Server API: 다섯 endpoint는 method·anonymous·미설정 경계를 안전하게 응답',
+    async () => {
+      const loginResponse = await handleAuthLogin(
+        new Request(
+          'https://today-table.test/api/auth/login',
+          { method: 'POST' },
+        ),
+      )
+      const anonymousResponse =
+        await handleAuthSession(
+          new Request(
+            'https://today-table.test/api/auth/session',
+          ),
+        )
+      const logoutResponse =
+        await handleAuthLogout(
+          new Request(
+            'https://today-table.test/api/auth/logout',
+            { method: 'POST' },
+          ),
+        )
+      const syncResponse = await handleAccountSync(
+        new Request(
+          'https://today-table.test/api/account/sync',
+        ),
+      )
+      const entitlementResponse =
+        await handleEntitlement(
+          new Request(
+            'https://today-table.test/api/entitlement',
+          ),
+        )
+
+      assert.equal(loginResponse.status, 503)
+      assert.equal(anonymousResponse.status, 200)
+      assert.deepEqual(
+        await anonymousResponse.json(),
+        {
+          authenticated: false,
+          user: null,
+          entitlement: null,
+        },
+      )
+      assert.equal(logoutResponse.status, 200)
+      assert.match(
+        logoutResponse.headers.get('set-cookie'),
+        /Max-Age=0/,
+      )
+      assert.equal(syncResponse.status, 503)
+      assert.equal(
+        entitlementResponse.status,
+        503,
+      )
+    },
+  )
+
+  await check(
+    'AI Access integration: 앱 시작 초기화와 서버 우선 계정 동기화 경계를 유지',
+    () => {
+      const mainSource = readFileSync(
+        'src/main.tsx',
+        'utf8',
+      )
+
+      assert.match(
+        mainSource,
+        /initializeAiAccessUsage\(window\.localStorage\)/,
+      )
+      assert.equal(
+        classifyAccountStorageKey(
+          AI_ACCESS_STORAGE_KEY,
+        ).conflictStrategy,
+        'server-authoritative',
+      )
+    },
+  )
+
+  await check(
+    'R5 Billing: verified Google Play subscription grants Premium',
+    () => {
+      const purchase = parseGooglePlaySubscription(
+        {
+          subscriptionState:
+            'SUBSCRIPTION_STATE_ACTIVE',
+          acknowledgementState:
+            'ACKNOWLEDGEMENT_STATE_PENDING',
+          startTime: '2026-07-31T00:00:00.000Z',
+          latestOrderId: 'order-redacted',
+          lineItems: [
+            {
+              productId: 'today_table_premium',
+              expiryTime:
+                '2026-08-31T00:00:00.000Z',
+              offerDetails: {
+                basePlanId: 'monthly',
+              },
+            },
+          ],
+        },
+        {
+          purchaseTokenHash: 'hashed-token',
+          packageName: 'app.todaytable',
+          allowedProductIds: [
+            'today_table_premium',
+          ],
+        },
+      )
+
+      assert.ok(purchase)
+      assert.equal(purchase.productId, 'today_table_premium')
+      assert.equal(purchase.basePlanId, 'monthly')
+      assert.equal(
+        isPremiumBillingState(
+          purchase.state,
+          purchase.expiresAt,
+          '2026-08-01T00:00:00.000Z',
+        ),
+        true,
+      )
+
+      const entitlement = createServerEntitlement(
+        'user-r5',
+        '2026-07-31T00:00:00.000Z',
+      )
+      const applied = applyVerifiedPurchaseToEntitlement(
+        entitlement,
+        purchase,
+        '2026-08-01T00:00:00.000Z',
+      )
+
+      assert.equal(applied.granted, true)
+      assert.equal(applied.entitlement.plan, 'PREMIUM')
+      assert.equal(
+        applied.entitlement.source,
+        'google-play',
+      )
+    },
+  )
+
+  await check(
+    'R5 Billing: validates input and calls subscriptionsv2 server API',
+    async () => {
+      assert.deepEqual(
+        parseBillingVerificationRequest({
+          purchaseToken: 'purchase-token-12345',
+        }),
+        { purchaseToken: 'purchase-token-12345' },
+      )
+      assert.equal(
+        parseBillingVerificationRequest({
+          purchaseToken: 'short',
+        }),
+        null,
+      )
+      assert.deepEqual(
+        parseBillingRestoreRequest({
+          purchaseTokens: [
+            'purchase-token-12345',
+            'purchase-token-12345',
+            'purchase-token-67890',
+          ],
+        }),
+        {
+          purchaseTokens: [
+            'purchase-token-12345',
+            'purchase-token-67890',
+          ],
+        },
+      )
+      const config = parseGooglePlayBillingConfig({
+        GOOGLE_PLAY_PACKAGE_NAME: 'app.todaytable',
+        GOOGLE_PLAY_PREMIUM_PRODUCT_IDS:
+          'today_table_premium',
+        GOOGLE_PLAY_SERVICE_ACCOUNT_EMAIL:
+          'billing@example.test',
+        GOOGLE_PLAY_SERVICE_ACCOUNT_PRIVATE_KEY:
+          'private-key-not-used-in-test',
+      })
+
+      assert.ok(config)
+
+      const verified = await verifyGooglePlaySubscription(
+        'purchase-token-12345',
+        config,
+        {
+          accessToken: 'server-access-token',
+          fetcher: async (url, init) => {
+            assert.match(
+              String(url),
+              /purchases\/subscriptionsv2\/tokens/,
+            )
+            assert.equal(
+              new Headers(init?.headers).get(
+                'authorization',
+              ),
+              'Bearer server-access-token',
+            )
+            return Response.json({
+              subscriptionState:
+                'SUBSCRIPTION_STATE_ACTIVE',
+              acknowledgementState:
+                'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED',
+              startTime:
+                '2026-07-31T00:00:00.000Z',
+              lineItems: [
+                {
+                  productId: 'today_table_premium',
+                  expiryTime:
+                    '2026-08-31T00:00:00.000Z',
+                },
+              ],
+            })
+          },
+        },
+      )
+
+      assert.equal(verified.state, 'ACTIVE')
+      assert.notEqual(
+        verified.purchaseTokenHash,
+        'purchase-token-12345',
+      )
+    },
+  )
+
+  await check(
+    'R5.1 Billing: 상태별 Premium 권한을 서버에서 재조정',
+    () => {
+      const base = {
+        ...createServerEntitlement(
+          'user-r51',
+          '2026-08-01T00:00:00.000Z',
+        ),
+        plan: 'PREMIUM',
+        source: 'google-play',
+        premiumExpiresAt:
+          '2026-09-01T00:00:00.000Z',
+      }
+      const purchase = {
+        purchaseTokenHash: 'token-hash-r51',
+        packageName: 'app.todaytable',
+        productId: 'today_table_premium',
+        basePlanId: 'monthly',
+        orderId: null,
+        acknowledgementState: 'ACKNOWLEDGED',
+        startAt: '2026-08-01T00:00:00.000Z',
+        expiresAt: '2026-09-01T00:00:00.000Z',
+        linkedPurchaseTokenHash: null,
+        testPurchase: true,
+      }
+
+      for (const state of [
+        'ACTIVE',
+        'GRACE_PERIOD',
+        'CANCELED',
+      ]) {
+        assert.equal(
+          reconcileGooglePlayEntitlement(
+            base,
+            [{ ...purchase, state }],
+            '2026-08-10T00:00:00.000Z',
+          ).plan,
+          'PREMIUM',
+        )
+      }
+
+      for (const state of [
+        'EXPIRED',
+        'ON_HOLD',
+        'PAUSED',
+        'PENDING',
+      ]) {
+        const resolved =
+          reconcileGooglePlayEntitlement(
+            base,
+            [{ ...purchase, state }],
+            '2026-08-10T00:00:00.000Z',
+          )
+
+        assert.equal(resolved.plan, 'FREE')
+        assert.equal(resolved.source, 'none')
+      }
+
+      assert.equal(
+        reconcileGooglePlayEntitlement(
+          base,
+          [
+            {
+              ...purchase,
+              state: 'ACTIVE',
+              acknowledgementState: 'PENDING',
+            },
+          ],
+          '2026-08-10T00:00:00.000Z',
+        ).plan,
+        'FREE',
+      )
+
+      assert.equal(
+        resolveServerEntitlement(
+          base,
+          '2026-09-01T00:00:00.000Z',
+        ).plan,
+        'FREE',
+      )
+    },
+  )
+
+  await check(
+    'R5.1 Billing: TWA 구매·조회·복원·구독 변경 bridge와 설정 문서',
+    () => {
+      const client = readFileSync(
+        'src/services/googlePlayBillingClient.ts',
+        'utf8',
+      )
+      const settings = readFileSync(
+        'src/pages/SettingsPage.tsx',
+        'utf8',
+      )
+      const admin = readFileSync(
+        'src/pages/AdminDashboardPage.tsx',
+        'utf8',
+      )
+      const setup = readFileSync(
+        'PLAY_CONSOLE_SETUP.md',
+        'utf8',
+      )
+
+      assert.match(
+        client,
+        /https:\/\/play\.google\.com\/billing/,
+      )
+      assert.match(client, /new PaymentRequest/)
+      assert.match(client, /listPurchases/)
+      assert.match(client, /changeSubscription/)
+      assert.match(client, /ReplacementMode/)
+      assert.match(settings, /구매 복원/)
+      assert.match(admin, /Google Play 구독/)
+      assert.match(admin, /summary\.billing\.active/)
+      assert.match(setup, /Real-time Developer Notifications/)
+      assert.match(
+        setup,
+        /GOOGLE_PLAY_SERVICE_ACCOUNT_PRIVATE_KEY/,
+      )
+    },
+  )
+
+  await check(
+    'R5 Cost Guard: estimates tokens and creates stable cache keys',
+    async () => {
+      assert.equal(
+        estimateAiCostUsd('gpt-5.6-luna', 1_000, 500),
+        0.004,
+      )
+      const left = await createAiCacheKey(
+        'mealPlan',
+        'gpt-5.6-luna',
+        { servings: 4, preference: 'korean' },
+      )
+      const right = await createAiCacheKey(
+        'mealPlan',
+        'gpt-5.6-luna',
+        { preference: 'korean', servings: 4 },
+      )
+
+      assert.equal(left, right)
+      const event = createAiUsageEvent({
+        id: 'usage-1',
+        userId: 'user-1',
+        operation: 'recipe',
+        model: 'gpt-5.6-luna',
+        inputTokens: 1_000,
+        outputTokens: 500,
+        success: true,
+        createdAt: '2026-07-31T00:00:00.000Z',
+      })
+
+      assert.equal(event.estimatedCostUsd, 0.004)
+      assert.equal(event.cacheHit, false)
+    },
+  )
+
+  await check(
+    'R5 Server wiring: AI operations, admin switch, and Neon schema',
+    () => {
+      const schema = readFileSync(
+        'scripts/server-schema.sql',
+        'utf8',
+      )
+      const mealPlanApi = readFileSync(
+        'api/ai/meal-plan-trial.ts',
+        'utf8',
+      )
+      const recipeApi = readFileSync(
+        'api/ai/meal-plan-recipe-detail.ts',
+        'utf8',
+      )
+      const recommendationApi = readFileSync(
+        'api/ai/recipe-recommendation.ts',
+        'utf8',
+      )
+
+      assert.match(
+        schema,
+        /create table if not exists billing_purchases/,
+      )
+      assert.match(
+        schema,
+        /create table if not exists ai_usage_events/,
+      )
+      assert.match(
+        schema,
+        /create table if not exists ai_result_cache/,
+      )
+      assert.match(
+        schema,
+        /create table if not exists runtime_settings/,
+      )
+      assert.doesNotMatch(schema, /purchase_token text/)
+      assert.match(mealPlanApi, /operation: 'mealPlan'/)
+      assert.match(recipeApi, /operation: 'recipe'/)
+      assert.match(
+        recommendationApi,
+        /operation: 'recommendation'/,
+      )
+      assert.ok(existsSync('api/billing/verify.ts'))
+      assert.ok(existsSync('api/billing/restore.ts'))
+      assert.ok(existsSync('api/admin.ts'))
+      assert.equal(
+        existsSync('api/admin/dashboard.ts'),
+        false,
+      )
+      assert.equal(
+        existsSync('api/admin/ai-switch.ts'),
+        false,
+      )
+    },
+  )
+
+  await check(
+    'P3.1 Admin API: 단일 함수가 Dashboard와 AI switch의 인증·권한·method를 보존',
+    async () => {
+      const now = '2026-08-03T00:00:00.000Z'
+      const sessionToken = 'admin-session-token-1234567890'
+      const tokenHash = await hashSessionToken(sessionToken)
+      const session = createServerSession(
+        {
+          id: 'session-admin',
+          userId: 'user-admin',
+          deviceId: 'device-admin',
+          tokenHash,
+        },
+        now,
+      )
+      const user = {
+        id: 'user-admin',
+        googleSubject: 'google-admin',
+        email: null,
+        displayName: null,
+        createdAt: now,
+        updatedAt: now,
+        lastLoginAt: now,
+        deletedAt: null,
+      }
+      const entitlement = createServerEntitlement(
+        user.id,
+        now,
+      )
+      const identity = {
+        repository: {
+          async findAuthContextBySessionTokenHash(
+            requestedHash,
+          ) {
+            return requestedHash === tokenHash
+              ? { session, user, entitlement }
+              : null
+          },
+        },
+        async verifyGoogleAuthorizationCode() {
+          throw new Error('not used')
+        },
+        now: () => new Date(now),
+      }
+      let runtimeSetting = null
+      const summary = {
+        generatedAt: now,
+        subscribers: 1,
+        plans: { FREE: 0, TRIAL: 1, PREMIUM: 0 },
+        aiEnabled: true,
+        todayAiCalls: 0,
+        todayEstimatedCostUsd: 0,
+        monthEstimatedCostUsd: 0,
+        todayErrors: 0,
+        feedbackCount: 0,
+        billing: {
+          active: 0,
+          expired: 0,
+          pending: 0,
+          canceled: 0,
+          onHold: 0,
+          paused: 0,
+        },
+        system: {
+          openAi: true,
+          database: true,
+          oauth: true,
+          billing: true,
+        },
+        users: [],
+      }
+      const business = {
+        async getAdminDashboardSummary() {
+          return summary
+        },
+        async findRuntimeSetting() {
+          return runtimeSetting
+        },
+        async saveRuntimeSetting(setting) {
+          runtimeSetting = setting
+          return setting
+        },
+      }
+      const createDependencies = (adminUserIds) => ({
+        identity,
+        business,
+        environment: {
+          ADMIN_USER_IDS: adminUserIds,
+          DATABASE_URL: 'configured',
+          OPENAI_API_KEY: 'configured',
+          GOOGLE_OAUTH_CLIENT_ID: 'configured',
+          GOOGLE_OAUTH_CLIENT_SECRET: 'configured',
+          GOOGLE_PLAY_PACKAGE_NAME: 'configured',
+          GOOGLE_PLAY_PREMIUM_PRODUCT_IDS: 'configured',
+          GOOGLE_PLAY_SERVICE_ACCOUNT_EMAIL: 'configured',
+          GOOGLE_PLAY_SERVICE_ACCOUNT_PRIVATE_KEY:
+            'configured',
+        },
+        now: () => new Date(now),
+      })
+      const cookie = `${SERVER_SESSION_COOKIE_NAME}=${sessionToken}`
+      const authenticatedHeaders = {
+        Cookie: cookie,
+      }
+
+      assert.equal(
+        resolveAdminApiAction(
+          new Request(
+            'https://today-table.test/api/admin?action=dashboard',
+          ),
+        ),
+        'dashboard',
+      )
+      assert.equal(
+        resolveAdminApiAction(
+          new Request(
+            'https://today-table.test/api/admin/ai-switch',
+          ),
+        ),
+        'ai-switch',
+      )
+
+      const unknown = await handleAdminRoute(
+        new Request(
+          'https://today-table.test/api/admin?action=delete-all',
+        ),
+      )
+      assert.equal(unknown.status, 404)
+      assert.deepEqual(await unknown.json(), {
+        code: 'ADMIN_ACTION_NOT_FOUND',
+      })
+
+      const unauthenticated = await handleAdminRoute(
+        new Request(
+          'https://today-table.test/api/admin?action=dashboard',
+        ),
+        createDependencies('user-admin'),
+      )
+      assert.equal(unauthenticated.status, 401)
+
+      const forbidden = await handleAdminRoute(
+        new Request(
+          'https://today-table.test/api/admin?action=dashboard',
+          { headers: authenticatedHeaders },
+        ),
+        createDependencies('another-user'),
+      )
+      assert.equal(forbidden.status, 403)
+
+      const dashboard = await handleAdminRoute(
+        new Request(
+          'https://today-table.test/api/admin?action=dashboard',
+          { headers: authenticatedHeaders },
+        ),
+        createDependencies('user-admin'),
+      )
+      assert.equal(dashboard.status, 200)
+      assert.equal((await dashboard.json()).subscribers, 1)
+
+      const switchRead = await handleAdminRoute(
+        new Request(
+          'https://today-table.test/api/admin?action=ai-switch',
+          { headers: authenticatedHeaders },
+        ),
+        createDependencies('user-admin'),
+      )
+      assert.equal(switchRead.status, 200)
+      assert.equal((await switchRead.json()).aiEnabled, true)
+
+      const switchUpdate = await handleAdminRoute(
+        new Request(
+          'https://today-table.test/api/admin?action=ai-switch',
+          {
+            method: 'PUT',
+            headers: {
+              ...authenticatedHeaders,
+              Origin: 'https://today-table.test',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ enabled: false }),
+          },
+        ),
+        createDependencies('user-admin'),
+      )
+      assert.equal(switchUpdate.status, 200)
+      assert.equal(
+        (await switchUpdate.json()).aiEnabled,
+        false,
+      )
+
+      const switchAfterUpdate = await handleAdminRoute(
+        new Request(
+          'https://today-table.test/api/admin?action=ai-switch',
+          { headers: authenticatedHeaders },
+        ),
+        createDependencies('user-admin'),
+      )
+      assert.equal(
+        (await switchAfterUpdate.json()).aiEnabled,
+        false,
+      )
+
+      const invalidMethod = await handleAdminRoute(
+        new Request(
+          'https://today-table.test/api/admin?action=dashboard',
+          { method: 'POST' },
+        ),
+      )
+      assert.equal(invalidMethod.status, 405)
+    },
+  )
+
+  await check(
+    'Sprint S4: auth·runtime setting·usage 저장과 OpenAI latency 설정 최적화',
+    () => {
+      const identityRepository = readFileSync(
+        'src/server/postgresIdentityRepository.ts',
+        'utf8',
+      )
+      const serverApi = readFileSync(
+        'src/server/serverApiEngine.ts',
+        'utf8',
+      )
+      const businessGuard = readFileSync(
+        'src/server/aiBusinessGuard.ts',
+        'utf8',
+      )
+      const businessRepository = readFileSync(
+        'src/server/postgresBusinessRepository.ts',
+        'utf8',
+      )
+      const recommendationApi = readFileSync(
+        'api/ai/recipe-recommendation.ts',
+        'utf8',
+      )
+      const recommendationClient = readFileSync(
+        'src/services/aiRecipeRecommendationClient.ts',
+        'utf8',
+      )
+      const trialApi = readFileSync(
+        'api/ai/meal-plan-trial.ts',
+        'utf8',
+      )
+      const detailApi = readFileSync(
+        'api/ai/meal-plan-recipe-detail.ts',
+        'utf8',
+      )
+      const vercelConfig = readFileSync(
+        'vercel.json',
+        'utf8',
+      )
+
+      assert.match(
+        identityRepository,
+        /findAuthContextBySessionTokenHash/,
+      )
+      assert.match(identityRepository, /row_to_json\(s\)/)
+      assert.match(identityRepository, /row_to_json\(u\)/)
+      assert.match(identityRepository, /row_to_json\(e\)/)
+      assert.match(
+        serverApi,
+        /storedContext\.session/,
+      )
+      assert.match(
+        businessGuard,
+        /RUNTIME_SETTING_CACHE_TTL_MS = 30_000/,
+      )
+      assert.match(
+        businessGuard,
+        /runtimeSettingResultPromise/,
+      )
+      assert.match(
+        businessGuard,
+        /saveAiResultCacheWithUsage/,
+      )
+      assert.match(businessGuard, /await Promise\.all\(/)
+      assert.match(
+        businessRepository,
+        /with saved_cache as/,
+      )
+      assert.match(
+        recommendationApi,
+        /SERVER_TIMEOUT_MS = 20_000/,
+      )
+      assert.match(
+        recommendationClient,
+        /CLIENT_TIMEOUT_MS = 23_000/,
+      )
+      assert.match(
+        recommendationApi,
+        /effort: 'none'/,
+      )
+      assert.match(
+        recommendationApi,
+        /MAX_OUTPUT_TOKENS = 3_000/,
+      )
+      assert.match(
+        recommendationApi,
+        /today_table_recipe_recommendations_compact_v1/,
+      )
+      assert.match(
+        recommendationApi,
+        /parseCompactAiRecommendationText/,
+      )
+      assert.match(
+        recommendationApi,
+        /maxItems: 8/,
+      )
+      assert.match(
+        recommendationApi,
+        /가장 자연스럽고 실제로 만들어 먹고 싶은 한국 가정식 메뉴 1개/,
+      )
+      assert.match(
+        recommendationApi,
+        /요리의 자연스러움, 2\) 실제 가정식 여부, 3\) 사용자가 선택할 가능성, 4\) 재료 활용/,
+      )
+      assert.match(
+        recommendationApi,
+        /억지로 모두 한 메뉴에 넣지 마세요/,
+      )
+      assert.match(
+        recommendationApi,
+        /곁들임·후식·다음 식사로 남기거나 사용하지 않아도 됩니다/,
+      )
+      assert.match(
+        recommendationApi,
+        /RECOMMENDATION_POLICY_VERSION =\s*'s5\.3-naturalness-v1'/,
+      )
+      assert.doesNotMatch(
+        recommendationApi,
+        /effort: 'low'/,
+      )
+      assert.match(trialApi, /SERVER_TIMEOUT_MS = 30_000/)
+      assert.match(detailApi, /SERVER_TIMEOUT_MS = 30_000/)
+      assert.equal(
+        JSON.parse(vercelConfig).functions[
+          'api/ai/recipe-recommendation.ts'
+        ].maxDuration,
+        25,
+      )
+    },
+  )
+
+  await check(
+    'Sprint S1: Home AI 진입과 냉장고 분기, 추천 후 연속 행동을 연결',
+    () => {
+      const app = readFileSync('src/App.tsx', 'utf8')
+      const home = readFileSync(
+        'src/pages/HomePage.tsx',
+        'utf8',
+      )
+      const homeCss = readFileSync(
+        'src/pages/HomePage.css',
+        'utf8',
+      )
+      const inventory = readFileSync(
+        'src/pages/InventoryPage.tsx',
+        'utf8',
+      )
+      const mealPlan = readFileSync(
+        'src/pages/MealPlanPage.tsx',
+        'utf8',
+      )
+      const recommendation = readFileSync(
+        'src/blocks/RecipeRecommendationBlock.tsx',
+        'utf8',
+      )
+
+      assert.match(home, /오늘 뭐 먹지\?/)
+      assert.match(
+        home,
+        /먼저 냉장고에 있는 재료를 등록해 주세요/,
+      )
+      assert.match(
+        home,
+        /냉장고 재료로 오늘 뭐 먹지\?/,
+      )
+      assert.match(
+        home,
+        /현재 등록된 냉장고 재료를 최대한 활용해/,
+      )
+      assert.match(home, /냉장고 재료 등록하기/)
+      assert.match(
+        home,
+        /냉장고 재료로 AI 추천받기/,
+      )
+      assert.match(
+        home,
+        /재료 등록 후 AI 추천을 받을 수 있어요/,
+      )
+      assert.match(
+        home,
+        /등록 재료 \$\{inventoryItems\.length\}개 기준/,
+      )
+      assert.match(
+        home,
+        /const hasInventoryItems = inventoryItems\.length > 0/,
+      )
+      assert.match(home, /onChangePage\('inventory'\)/)
+      assert.match(home, /onStartAiRecommendation\(\)/)
+      assert.match(
+        home,
+        /if \(!hasInventoryItems\) \{[\s\S]*?onChangePage\('inventory'\)[\s\S]*?return[\s\S]*?\}[\s\S]*?onStartAiRecommendation\(\)/,
+      )
+      assert.match(
+        homeCss,
+        /\.home-ai-entry__action \{[\s\S]*?min-height: 56px;[\s\S]*?white-space: nowrap;/,
+      )
+      assert.match(app, /openAiRecommendation/)
+      assert.match(mealPlan, /autoStartAi/)
+      assert.match(
+        recommendation,
+        /requestAiRecipeRecommendations/,
+      )
+      assert.match(recommendation, /레시피 보기/)
+      assert.match(recommendation, /장보기에 추가/)
+      assert.match(recommendation, /장보기 목록 보기/)
+      assert.match(recommendation, /식단에 담기/)
+      assert.match(
+        inventory,
+        /냉장고에 재료를 등록하면 AI가 더 정확하게 추천합니다/,
       )
     },
   )

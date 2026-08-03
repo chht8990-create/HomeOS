@@ -16,6 +16,9 @@ export type PageName =
   | 'settings'
   | 'guide'
   | 'feedback'
+  | 'privacy'
+  | 'terms'
+  | 'admin'
 
 type BottomNavigationProps = {
   currentPage: PageName

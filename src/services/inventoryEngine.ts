@@ -35,11 +35,8 @@ export function calculateMissingIngredients(
       {
         ...ingredient,
         quantity:
-          Math.round(
-            (missingBaseQuantity /
-              required.sourceUnitFactor) *
-              1000,
-          ) / 1000,
+          missingBaseQuantity /
+          required.sourceUnitFactor,
       },
     ]
   })

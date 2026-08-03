@@ -27,3 +27,15 @@ dist-ssr
 *.sw?
 
 .vercel
+
+# Android/TWA local build and signing material
+.bubblewrap-tooling/
+android/.gradle/
+android/local.properties
+android/*.jks
+android/*.keystore
+android/keystore.properties
+android/*credential*.clixml
+android/**/*.apk
+android/**/*.aab
+android/**/build/

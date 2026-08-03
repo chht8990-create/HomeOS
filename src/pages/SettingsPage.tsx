@@ -4,11 +4,17 @@ import {
 } from 'react'
 import {
   BookOpen,
+  CreditCard,
+  FileText,
+  LogIn,
+  LogOut,
   MessageSquareText,
   PackageOpen,
   RotateCcw,
   Ruler,
+  ShieldCheck,
   Upload,
+  UserRound,
 } from 'lucide-react'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
@@ -16,6 +22,7 @@ import EmptyState from '../components/ui/EmptyState'
 import ScreenHeader from '../components/ui/ScreenHeader'
 import Section from '../components/ui/Section'
 import useHomeOsBackup from '../hooks/useHomeOsBackup'
+import useAuthSession from '../hooks/useAuthSession'
 import useMealPackImport from '../hooks/useMealPackImport'
 import useMeasurementPreferences from '../hooks/useMeasurementPreferences'
 import { measurementToolOptions } from '../services/measurementEngine'
@@ -23,6 +30,21 @@ import type { HomeOsBackup } from '../services/homeOsBackupEngine'
 import type { MealType } from '../types/meal'
 import type { MealPackPreview } from '../services/mealPackEngine'
 import { APP_VERSION } from '../config/app'
+import {
+  OFFICIAL_SUPPORT_EMAIL,
+  OFFICIAL_SUPPORT_MAILTO,
+} from '../config/contact'
+import {
+  getGooglePlayBillingErrorMessage,
+  isGooglePlayBillingAvailable,
+  purchasePremiumSubscription,
+  refreshBillingAccount,
+  restorePremiumSubscription,
+} from '../services/googlePlayBillingClient'
+
+const googlePlayPremiumProductId =
+  import.meta.env.VITE_GOOGLE_PLAY_PREMIUM_PRODUCT_ID?.trim() ??
+  ''
 
 const mealTypeLabels: Record<MealType, string> = {
   breakfast: '아침',
@@ -34,12 +56,16 @@ const mealTypeLabels: Record<MealType, string> = {
 type SettingsPageProps = {
   onOpenGuide: () => void
   onOpenFeedback: () => void
+  onOpenPrivacy: () => void
+  onOpenTerms: () => void
   onReplayTutorial: () => void
 }
 
 function SettingsPage({
   onOpenGuide,
   onOpenFeedback,
+  onOpenPrivacy,
+  onOpenTerms,
   onReplayTutorial,
 }: SettingsPageProps) {
   const { prepare, apply } = useMealPackImport()
@@ -52,6 +78,7 @@ function SettingsPage({
     selectedTools,
     toggleTool,
   } = useMeasurementPreferences()
+  const auth = useAuthSession()
   const [fileInputKey, setFileInputKey] =
     useState(0)
   const [selectedFileName, setSelectedFileName] =
@@ -72,6 +99,40 @@ function SettingsPage({
   >([])
   const [backupStatus, setBackupStatus] =
     useState('')
+  const [billingStatus, setBillingStatus] = useState('')
+  const [billingBusy, setBillingBusy] = useState(false)
+
+  async function runBillingAction(
+    action: () => Promise<{ granted: boolean }>,
+    successMessage: string,
+  ) {
+    if (billingBusy) {
+      return
+    }
+
+    setBillingBusy(true)
+    setBillingStatus('')
+
+    try {
+      const result = await action()
+
+      if (!result.granted) {
+        setBillingStatus(
+          '활성 상태인 Google Play 구독을 찾지 못했어요.',
+        )
+        return
+      }
+
+      auth.setSession(await refreshBillingAccount())
+      setBillingStatus(successMessage)
+    } catch (error) {
+      setBillingStatus(
+        getGooglePlayBillingErrorMessage(error),
+      )
+    } finally {
+      setBillingBusy(false)
+    }
+  }
 
   function resetSelection() {
     setFileInputKey((currentKey) => currentKey + 1)
@@ -250,6 +311,169 @@ function SettingsPage({
                 <span>작성한 의견·기기 정보</span>
               </li>
             </ul>
+          </Card>
+        </Section>
+
+        <Section
+          title="약관 및 정책"
+          description="오늘식탁의 데이터 처리와 이용 기준을 확인하세요."
+        >
+          <Card className="settings-help-card">
+            <Button
+              variant="secondary"
+              fullWidth
+              onClick={onOpenPrivacy}
+            >
+              <ShieldCheck size={18} aria-hidden="true" />
+              개인정보처리방침
+            </Button>
+            <Button
+              variant="secondary"
+              fullWidth
+              onClick={onOpenTerms}
+            >
+              <FileText size={18} aria-hidden="true" />
+              이용약관
+            </Button>
+            <p className="settings-support-contact">
+              운영 문의:{' '}
+              <a href={OFFICIAL_SUPPORT_MAILTO}>
+                {OFFICIAL_SUPPORT_EMAIL}
+              </a>
+            </p>
+          </Card>
+        </Section>
+
+        {googlePlayPremiumProductId ? (
+          <Section
+            title="오늘식탁 Premium"
+            description="Google Play 구독은 서버에서 확인된 뒤 계정에 적용됩니다."
+          >
+            <Card className="settings-help-card">
+              <div className="settings-brand-card__identity">
+                <CreditCard size={32} aria-hidden="true" />
+                <div>
+                  <strong>Premium 구독</strong>
+                  <span>
+                    구매와 복원에는 Google 로그인이 필요해요.
+                  </span>
+                </div>
+              </div>
+              {!isGooglePlayBillingAvailable() ? (
+                <p className="meal-editor__help">
+                  Google Play에서 설치한 앱에서 구매하거나 기존
+                  구독을 복원할 수 있어요.
+                </p>
+              ) : null}
+              <Button
+                fullWidth
+                disabled={
+                  billingBusy ||
+                  auth.session.status !== 'authenticated' ||
+                  !isGooglePlayBillingAvailable()
+                }
+                onClick={() =>
+                  void runBillingAction(
+                    () =>
+                      purchasePremiumSubscription(
+                        googlePlayPremiumProductId,
+                      ),
+                    'Premium 구독을 계정에 적용했어요.',
+                  )
+                }
+              >
+                {billingBusy ? '확인 중…' : 'Premium 시작하기'}
+              </Button>
+              <Button
+                variant="secondary"
+                fullWidth
+                disabled={
+                  billingBusy ||
+                  auth.session.status !== 'authenticated' ||
+                  !isGooglePlayBillingAvailable()
+                }
+                onClick={() =>
+                  void runBillingAction(
+                    restorePremiumSubscription,
+                    'Google Play 구독을 복원했어요.',
+                  )
+                }
+              >
+                구매 복원
+              </Button>
+              {billingStatus ? (
+                <p role="status">{billingStatus}</p>
+              ) : null}
+            </Card>
+          </Section>
+        ) : null}
+
+        <Section
+          title="계정"
+          description="Google 계정으로 식단과 장보기 데이터를 안전하게 동기화하세요."
+        >
+          <Card className="settings-help-card">
+            {auth.phase === 'loading' ? (
+              <p role="status">
+                로그인 상태를 확인하고 있어요.
+              </p>
+            ) : auth.session.status ===
+              'authenticated' ? (
+              <>
+                <div className="settings-brand-card__identity">
+                  <UserRound
+                    size={32}
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <strong>
+                      {auth.session.user.displayName}
+                    </strong>
+                    <span>
+                      {auth.session.user.email}
+                    </span>
+                  </div>
+                </div>
+                <p className="meal-editor__help">
+                  이 기기의 데이터는 로그인 후 서버와
+                  동기화됩니다.
+                </p>
+                <Button
+                  variant="secondary"
+                  fullWidth
+                  onClick={() => void auth.logout()}
+                >
+                  <LogOut
+                    size={18}
+                    aria-hidden="true"
+                  />
+                  로그아웃
+                </Button>
+              </>
+            ) : (
+              <>
+                <p>
+                  로그인하면 다른 기기에서도 같은
+                  데이터를 이어서 사용할 수 있어요.
+                </p>
+                <Button
+                  fullWidth
+                  onClick={auth.login}
+                >
+                  <LogIn
+                    size={18}
+                    aria-hidden="true"
+                  />
+                  Google 계정으로 로그인
+                </Button>
+              </>
+            )}
+            {auth.phase === 'error' ? (
+              <p role="alert">
+                계정 작업을 완료하지 못했어요. 잠시 후
+                다시 시도해 주세요.
+              </p>
+            ) : null}
           </Card>
         </Section>
 

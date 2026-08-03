@@ -1,5 +1,6 @@
 import {
   AI_MAX_RECOMMENDATIONS,
+  normalizeAiRecipeRecommendations,
   parseAiRecipeRecommendationOutput,
   validateAiRecipeRecommendationRequest,
 } from './aiRecipeRecommendationEngine'
@@ -8,7 +9,7 @@ import type {
   AiRecipeRecommendationResponse,
 } from '../types/aiRecipeRecommendation'
 
-const CLIENT_TIMEOUT_MS = 15_000
+const CLIENT_TIMEOUT_MS = 23_000
 const DUPLICATE_WINDOW_MS = 30_000
 
 type ApiErrorResponse = {
@@ -130,17 +131,23 @@ async function performRequest(
       recommendations?: unknown
       meta?: unknown
     }
-    const recommendations =
+    const parsedRecommendations =
       parseAiRecipeRecommendationOutput({
         recommendations: rawResponse.recommendations,
       })
 
-    if (!recommendations) {
+    if (!parsedRecommendations) {
       throw new AiRecipeRecommendationError(
         'AI_RESPONSE_INVALID',
         'AI 추천 결과를 안전하게 읽지 못했어요.',
       )
     }
+
+    const recommendations =
+      normalizeAiRecipeRecommendations(
+        parsedRecommendations,
+        request,
+      )
 
     return {
       recommendations,

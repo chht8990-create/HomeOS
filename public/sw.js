@@ -1,10 +1,11 @@
 const RELEASE_VERSION = '1.0.2'
+const CACHE_REVISION = 's7-rc1'
 const CACHE_PREFIX = 'today-table'
 const DEPLOYMENT_SCOPE =
   self.location.hostname === 'home-os-one.vercel.app'
     ? 'production'
     : `preview-${self.location.hostname}`
-const CACHE_NAMESPACE = `${CACHE_PREFIX}-${DEPLOYMENT_SCOPE}-v${RELEASE_VERSION}`
+const CACHE_NAMESPACE = `${CACHE_PREFIX}-${DEPLOYMENT_SCOPE}-v${RELEASE_VERSION}-${CACHE_REVISION}`
 const APP_SHELL_CACHE = `${CACHE_NAMESPACE}-shell`
 const STATIC_CACHE = `${CACHE_NAMESPACE}-static`
 const CURRENT_CACHES = new Set([

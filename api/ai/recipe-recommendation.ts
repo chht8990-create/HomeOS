@@ -13,17 +13,28 @@ import type {
   AiRecipeRecommendationRequest,
   AiRecipeRecommendationResponse,
 } from '../../src/types/aiRecipeRecommendation.js'
+import { runAiBusinessGuard } from '../../src/server/aiBusinessGuard.js'
+import {
+  createCompactAiRecommendationSchema,
+  parseCompactAiRecommendationText,
+} from '../../src/server/compactAiRecommendationEngine.js'
+import {
+  logAiLatencyStage,
+  type AiLatencyTrace,
+} from '../../src/server/aiLatencyTrace.js'
 
 const OPENAI_RESPONSES_URL =
   'https://api.openai.com/v1/responses'
 const DEFAULT_MODEL = 'gpt-5.6-luna'
 const SERVER_TIMEOUT_MS = 20_000
-const MAX_OUTPUT_TOKENS = 6_000
+const MAX_OUTPUT_TOKENS = 3_000
 const MAX_REQUEST_BYTES = 20_000
 const MAX_RESPONSE_BYTES = 250_000
 const MAX_UPSTREAM_RETRIES = 1
 const DUPLICATE_WINDOW_MS = 30_000
 const MAX_CACHE_ENTRIES = 25
+const RECOMMENDATION_POLICY_VERSION =
+  's5.3-naturalness-v1'
 const MAX_ERROR_FIELD_LENGTH = 120
 const MAX_ERROR_MESSAGE_LENGTH = 240
 
@@ -82,7 +93,7 @@ const responseSchema = {
           summary: {
             type: 'string',
             minLength: 1,
-            maxLength: 240,
+            maxLength: 120,
           },
           servings: {
             type: 'integer',
@@ -150,14 +161,14 @@ const responseSchema = {
                 },
                 note: {
                   type: ['string', 'null'],
-                  maxLength: 120,
+                  maxLength: 80,
                 },
                 optional: {
                   type: 'boolean',
                 },
                 substitute: {
                   type: 'array',
-                  maxItems: 4,
+                  maxItems: 2,
                   items: {
                     type: 'string',
                     minLength: 1,
@@ -205,7 +216,7 @@ const responseSchema = {
           steps: {
             type: 'array',
             minItems: 8,
-            maxItems: 12,
+            maxItems: 8,
             items: {
               type: 'object',
               additionalProperties: false,
@@ -218,12 +229,12 @@ const responseSchema = {
                 title: {
                   type: 'string',
                   minLength: 1,
-                  maxLength: 80,
+                  maxLength: 40,
                 },
                 instruction: {
                   type: 'string',
                   minLength: 1,
-                  maxLength: 400,
+                  maxLength: 160,
                 },
                 durationMinutes: {
                   type: 'integer',
@@ -233,20 +244,20 @@ const responseSchema = {
                 heatLevel: {
                   type: 'string',
                   minLength: 1,
-                  maxLength: 40,
+                  maxLength: 30,
                 },
                 completionCue: {
                   type: 'string',
                   minLength: 1,
-                  maxLength: 180,
+                  maxLength: 100,
                 },
                 reason: {
                   type: ['string', 'null'],
-                  maxLength: 180,
+                  maxLength: 100,
                 },
                 warning: {
                   type: ['string', 'null'],
-                  maxLength: 180,
+                  maxLength: 100,
                 },
                 ingredientRefs: {
                   type: 'array',
@@ -275,51 +286,51 @@ const responseSchema = {
           seasoningAdjustment: {
             type: 'array',
             minItems: 1,
-            maxItems: 4,
+            maxItems: 2,
             items: {
               type: 'string',
               minLength: 1,
-              maxLength: 180,
+              maxLength: 120,
             },
           },
           commonMistakes: {
             type: 'array',
             minItems: 1,
-            maxItems: 4,
+            maxItems: 2,
             items: {
               type: 'string',
               minLength: 1,
-              maxLength: 180,
+              maxLength: 120,
             },
           },
           storage: {
             type: 'string',
             minLength: 1,
-            maxLength: 240,
+            maxLength: 160,
           },
           reheating: {
             type: 'string',
             minLength: 1,
-            maxLength: 240,
+            maxLength: 160,
           },
           leftoverIdeas: {
             type: 'array',
             minItems: 1,
-            maxItems: 4,
+            maxItems: 1,
             items: {
               type: 'string',
               minLength: 1,
-              maxLength: 180,
+              maxLength: 120,
             },
           },
           servingSuggestions: {
             type: 'array',
             minItems: 1,
-            maxItems: 4,
+            maxItems: 1,
             items: {
               type: 'string',
               minLength: 1,
-              maxLength: 180,
+              maxLength: 120,
             },
           },
         },
@@ -347,6 +358,9 @@ const responseSchema = {
   },
   required: ['recommendations'],
 } as const
+
+const compactResponseSchema =
+  createCompactAiRecommendationSchema(responseSchema)
 
 function jsonResponse(
   body: unknown,
@@ -451,17 +465,14 @@ function buildPrompt(
 ) {
   return JSON.stringify({
     task:
-      '아래 냉장고 재료를 최대한 활용해 인터넷 검색 없이 그대로 조리할 수 있는 한국 가정식 메뉴를 한국어로 1~3개 추천하세요.',
+      '아래 냉장고 재료를 참고해 인터넷 검색 없이 그대로 조리할 수 있는 가장 자연스럽고 실제로 만들어 먹고 싶은 한국 가정식 메뉴 1개를 한국어로 추천하세요.',
     rules: [
-      '재료 이름과 단위는 정확히 비교하고 단위를 변환하지 마세요.',
-      '인분 수에 맞춰 주재료, 양념, 물과 육수, 고명까지 빠짐없이 정확한 수량과 단위를 쓰세요.',
-      '모든 재료에 그룹을 지정하고 조리 단계 ingredientRefs에는 재료 목록의 이름만 정확히 사용하세요.',
-      '물과 육수는 반드시 ml 단위로 쓰고 양념도 생략하지 마세요.',
-      '조리 단계는 8~12개로 나누고 매 단계에 시간, 불 세기, 눈으로 확인할 완성 기준을 쓰세요.',
-      '간 조절, 자주 하는 실수, 보관, 재가열, 남은 음식 활용, 곁들이기 정보를 모두 제공하세요.',
-      '인분 수를 반영하고 부족 재료는 꼭 필요한 것만 일반 가정에서 구하기 쉬운 재료로 제한하세요.',
+      '추천 우선순위는 1) 요리의 자연스러움, 2) 실제 가정식 여부, 3) 사용자가 선택할 가능성, 4) 재료 활용입니다. 냉장고 재료는 가능한 활용하되 억지로 모두 한 메뉴에 넣지 마세요. 자연스럽지 않은 재료는 곁들임·후식·다음 식사로 남기거나 사용하지 않아도 됩니다.',
+      '인분 수에 맞춰 모든 재료를 그룹별 정확한 수량·단위로 쓰세요. 물·육수는 ml로 쓰고 양념도 생략하지 말며, ingredientRefs에는 재료 목록의 이름만 사용하세요.',
+      '조리 단계는 정확히 8개로 쓰고 제목·행동·시간·불 세기·완성 기준을 짧게 적으세요. reason과 warning은 꼭 필요할 때만 쓰고 나머지는 null로 두세요.',
+      '간 조절과 실수는 최대 2개, 보관·재가열·남은 음식 활용·곁들이기는 각각 한 문장으로 간결하게 쓰세요.',
+      '냉장고 재료의 이름·단위를 정확히 비교하고 보유량을 넘는 부분만 부족 재료로 표시하며 추가 구매는 최소화하세요.',
       '선호 조건을 참고하고 제외 재료는 재료·양념·고명에 절대 사용하지 마세요.',
-      '생고기와 달걀 등은 속까지 충분히 익히도록 안전하게 안내하세요.',
       '개인정보를 추론하거나 요청하지 마세요.',
     ],
     servings: input.servings,
@@ -943,6 +954,7 @@ async function fetchOpenAiWithRetry(
 async function requestOpenAi(
   input: AiRecipeRecommendationRequest,
   environment: AiServerEnvironment,
+  trace?: AiLatencyTrace,
 ) {
   const apiKey = environment.OPENAI_API_KEY?.trim()
 
@@ -977,6 +989,11 @@ async function requestOpenAi(
   )
 
   try {
+    const prompt = buildPrompt(input)
+    logAiLatencyStage(trace, 'prompt_created', {
+      httpStatus: 200,
+    })
+    logAiLatencyStage(trace, 'openai_request_started')
     const openAiResponse =
       await fetchOpenAiWithRetry({
         method: 'POST',
@@ -995,13 +1012,13 @@ async function requestOpenAi(
             },
             {
               role: 'user',
-              content: buildPrompt(input),
+              content: prompt,
             },
           ],
           ...(model.startsWith('gpt-5.6')
             ? {
                 reasoning: {
-                  effort: 'low',
+                  effort: 'none',
                 },
               }
             : {}),
@@ -1009,17 +1026,32 @@ async function requestOpenAi(
             verbosity: 'low',
             format: {
               type: 'json_schema',
-              name: 'today_table_recipe_recommendations',
+              name: 'today_table_recipe_recommendations_compact_v1',
               strict: true,
-              schema: responseSchema,
+              schema: compactResponseSchema,
             },
           },
           max_output_tokens: MAX_OUTPUT_TOKENS,
         }),
         signal: abortController.signal,
       })
+    const upstreamRequestId =
+      openAiResponse.headers.get('x-request-id')
+
+    logAiLatencyStage(
+      trace,
+      'openai_headers_received',
+      {
+        httpStatus: openAiResponse.status,
+        upstreamRequestId,
+      },
+    )
 
     const responseText = await openAiResponse.text()
+    logAiLatencyStage(trace, 'openai_body_received', {
+      httpStatus: openAiResponse.status,
+      upstreamRequestId,
+    })
 
     if (!openAiResponse.ok) {
       const details = parseOpenAiErrorDetails(
@@ -1075,11 +1107,10 @@ async function requestOpenAi(
       )
     }
 
-    let structuredOutput: unknown
+    const structuredOutput =
+      parseCompactAiRecommendationText(structuredText)
 
-    try {
-      structuredOutput = JSON.parse(structuredText)
-    } catch {
+    if (!structuredOutput) {
       finishInvocation(false)
       return createErrorResponse(
         'AI_RESPONSE_INVALID',
@@ -1117,12 +1148,17 @@ async function requestOpenAi(
       )
     }
 
+    logAiLatencyStage(trace, 'json_parsed', {
+      httpStatus: openAiResponse.status,
+      upstreamRequestId,
+    })
     finishInvocation(true)
 
     return jsonResponse({
       recommendations: normalizedRecommendations,
       meta: {
         maxRecommendations: AI_MAX_RECOMMENDATIONS,
+        ...(usage ? { usage } : {}),
       },
     })
   } catch (error) {
@@ -1147,6 +1183,7 @@ async function requestOpenAi(
 export async function handleAiRecipeRecommendation(
   request: Request,
   environment: AiServerEnvironment,
+  trace?: AiLatencyTrace,
 ) {
   if (request.method !== 'POST') {
     return createErrorResponse(
@@ -1197,6 +1234,14 @@ export async function handleAiRecipeRecommendation(
     validateAiRecipeRecommendationRequest(requestBody)
 
   if (!validation.ok) {
+    logAiLatencyStage(
+      trace,
+      'inventory_validation_completed',
+      {
+        httpStatus: 400,
+        errorCode: validation.code,
+      },
+    )
     return createErrorResponse(
       validation.code,
       validation.message,
@@ -1204,7 +1249,16 @@ export async function handleAiRecipeRecommendation(
     )
   }
 
-  const signature = JSON.stringify(validation.data)
+  logAiLatencyStage(
+    trace,
+    'inventory_validation_completed',
+    { httpStatus: 200 },
+  )
+
+  const signature = JSON.stringify({
+    version: RECOMMENDATION_POLICY_VERSION,
+    input: validation.data,
+  })
   const cachedResponse = getCachedResponse(signature)
 
   if (cachedResponse) {
@@ -1225,6 +1279,7 @@ export async function handleAiRecipeRecommendation(
   const response = await requestOpenAi(
     validation.data,
     environment,
+    trace,
   )
 
   if (response.ok) {
@@ -1239,9 +1294,25 @@ export async function handleAiRecipeRecommendation(
 
 export default {
   fetch(request: Request) {
-    return handleAiRecipeRecommendation(
+    if (request.method !== 'POST') {
+      return handleAiRecipeRecommendation(
+        request,
+        process.env,
+      )
+    }
+
+    return runAiBusinessGuard({
+      operation: 'recommendation',
+      cacheTtlMs: 60 * 60 * 1_000,
+      cacheVersion: RECOMMENDATION_POLICY_VERSION,
+      environment: process.env,
       request,
-      process.env,
-    )
+      execute: (guardedRequest, trace) =>
+        handleAiRecipeRecommendation(
+          guardedRequest,
+          process.env,
+          trace,
+        ),
+    })
   },
 }

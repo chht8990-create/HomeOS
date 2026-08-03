@@ -24,6 +24,10 @@ import {
   feedbackCategoryLabels,
 } from '../services/feedbackEngine'
 import type { FeedbackCategory } from '../types/feedback'
+import {
+  OFFICIAL_SUPPORT_EMAIL,
+  OFFICIAL_SUPPORT_MAILTO,
+} from '../config/contact'
 
 type FeedbackPageProps = {
   onBack: () => void
@@ -262,6 +266,14 @@ function FeedbackPage({
                 앱 버전과 기기 정보가 오류 확인을 위해
                 함께 전송됩니다. 식단·냉장고·장보기
                 내용은 전송하지 않아요.
+              </p>
+
+              <p className="feedback-form__support">
+                계정·개인정보 문의는{' '}
+                <a href={OFFICIAL_SUPPORT_MAILTO}>
+                  {OFFICIAL_SUPPORT_EMAIL}
+                </a>
+                로 보내주세요.
               </p>
 
               {submissionState === 'error' ? (

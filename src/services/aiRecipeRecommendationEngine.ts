@@ -6,6 +6,16 @@ import type {
   AiRecipeRecommendationRequest,
   AiRecipeStep,
 } from '../types/aiRecipeRecommendation.js'
+import {
+  correctKnownAiText,
+  polishAiMenuTitle,
+} from './aiTextQualityEngine.js'
+import {
+  isWaterIngredientName,
+  normalizeShoppingIngredientDisplayName,
+  normalizeShoppingIngredientMatchName,
+  normalizeShoppingIngredientPolicyName,
+} from './shoppingIngredientPolicy.js'
 
 export const AI_MAX_INVENTORY_ITEMS = 40
 export const AI_MAX_RECOMMENDATIONS = 3
@@ -514,8 +524,25 @@ export function parseAiRecipeRecommendationOutput(
     : null
 }
 
+const inventoryIngredientAliases = new Map([
+  ['계란', '달걀'],
+  ['달걀', '달걀'],
+])
+
+export function normalizeInventoryIngredientName(
+  value: string,
+) {
+  const normalized =
+    normalizeShoppingIngredientMatchName(value)
+
+  return (
+    inventoryIngredientAliases.get(normalized) ??
+    normalized
+  )
+}
+
 function normalizeName(value: string) {
-  return value.trim().toLowerCase()
+  return normalizeInventoryIngredientName(value)
 }
 
 function getInventoryQuantity(
@@ -547,8 +574,11 @@ export function normalizeAiRecipeRecommendations(
 
   return recommendations
     .flatMap((recommendation) => {
-      const titleKey = normalizeName(
+      const title = polishAiMenuTitle(
         recommendation.title,
+      )
+      const titleKey = normalizeName(
+        title,
       )
 
       if (seenTitles.has(titleKey)) {
@@ -559,26 +589,57 @@ export function normalizeAiRecipeRecommendations(
         string,
         Omit<AiRecipeIngredient, 'available'>
       >()
+      const mergedIngredientSourceNames = new Map<
+        string,
+        string
+      >()
 
       for (const ingredient of recommendation.ingredients) {
-        const name = ingredient.name.trim()
+        const correctedName = correctKnownAiText(
+          ingredient.name,
+        ).trim()
+        const name = normalizeShoppingIngredientDisplayName(
+          correctedName,
+        )
         const unit = ingredient.unit.trim()
         const ingredientKey = `${normalizeName(name)}\u0000${unit}`
+        const sourceNameKey =
+          normalizeShoppingIngredientPolicyName(
+            correctedName,
+          )
         const existingIngredient =
           mergedIngredients.get(ingredientKey)
 
         if (existingIngredient) {
-          existingIngredient.quantity += ingredient.quantity
+          const existingSourceNameKey =
+            mergedIngredientSourceNames.get(ingredientKey)
+
+          existingIngredient.quantity =
+            existingSourceNameKey === sourceNameKey
+              ? existingIngredient.quantity +
+                ingredient.quantity
+              : Math.max(
+                  existingIngredient.quantity,
+                  ingredient.quantity,
+                )
         } else {
           mergedIngredients.set(ingredientKey, {
             name,
             quantity: ingredient.quantity,
             unit,
             group: ingredient.group,
-            note: ingredient.note,
+            note: ingredient.note
+              ? correctKnownAiText(ingredient.note)
+              : null,
             optional: ingredient.optional,
-            substitute: [...ingredient.substitute],
+            substitute: ingredient.substitute.map(
+              correctKnownAiText,
+            ),
           })
+          mergedIngredientSourceNames.set(
+            ingredientKey,
+            sourceNameKey,
+          )
         }
       }
 
@@ -607,6 +668,10 @@ export function normalizeAiRecipeRecommendations(
 
       const missingIngredients =
         ingredients.flatMap((ingredient) => {
+          if (isWaterIngredientName(ingredient.name)) {
+            return []
+          }
+
           const availableQuantity =
             getInventoryQuantity(
               input.inventoryItems,
@@ -632,26 +697,58 @@ export function normalizeAiRecipeRecommendations(
       return [
         {
           ...recommendation,
+          title,
+          summary: correctKnownAiText(
+            recommendation.summary,
+          ),
           ingredients,
           missingIngredients,
           steps: recommendation.steps.map((step) => ({
             ...step,
-            ingredientRefs: [
-              ...step.ingredientRefs,
-            ],
+            title: correctKnownAiText(step.title),
+            instruction: correctKnownAiText(
+              step.instruction,
+            ),
+            heatLevel: correctKnownAiText(
+              step.heatLevel,
+            ),
+            completionCue: correctKnownAiText(
+              step.completionCue,
+            ),
+            reason: step.reason
+              ? correctKnownAiText(step.reason)
+              : null,
+            warning: step.warning
+              ? correctKnownAiText(step.warning)
+              : null,
+            ingredientRefs: step.ingredientRefs.map(
+              (ingredientRef) =>
+                normalizeShoppingIngredientDisplayName(
+                  correctKnownAiText(ingredientRef),
+                ),
+            ),
           })),
-          seasoningAdjustment: [
-            ...recommendation.seasoningAdjustment,
-          ],
-          commonMistakes: [
-            ...recommendation.commonMistakes,
-          ],
-          leftoverIdeas: [
-            ...recommendation.leftoverIdeas,
-          ],
-          servingSuggestions: [
-            ...recommendation.servingSuggestions,
-          ],
+          seasoningAdjustment:
+            recommendation.seasoningAdjustment.map(
+              correctKnownAiText,
+            ),
+          commonMistakes:
+            recommendation.commonMistakes.map(
+              correctKnownAiText,
+            ),
+          storage: correctKnownAiText(
+            recommendation.storage,
+          ),
+          reheating: correctKnownAiText(
+            recommendation.reheating,
+          ),
+          leftoverIdeas: recommendation.leftoverIdeas.map(
+            correctKnownAiText,
+          ),
+          servingSuggestions:
+            recommendation.servingSuggestions.map(
+              correctKnownAiText,
+            ),
         },
       ]
     })

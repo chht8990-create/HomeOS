@@ -20,13 +20,16 @@ import {
   HISTORY_MODAL_CHANGE_EVENT,
 } from './hooks/useHistoryModal'
 import FeedbackPage from './pages/FeedbackPage'
+import AdminDashboardPage from './pages/AdminDashboardPage'
 import GuidePage from './pages/GuidePage'
 import InventoryPage from './pages/InventoryPage'
 import HomePage from './pages/HomePage'
 import MealPlanPage from './pages/MealPlanPage'
+import PrivacyPage from './pages/PrivacyPage'
 import RecipePage from './pages/RecipePage'
 import SettingsPage from './pages/SettingsPage'
 import ShoppingPage from './pages/ShoppingPage'
+import TermsPage from './pages/TermsPage'
 import type { Ingredient } from './types/ingredient'
 import { createDefaultMonthlyMealPlans } from './services/defaultMealPlanEngine'
 import {
@@ -105,8 +108,9 @@ function App() {
     useState<AppNavigationState>(() => {
       const initialNavigation =
         readNavigationState(
-        window.history.state,
-        window.location.search,
+          window.history.state,
+          window.location.search,
+          window.location.pathname,
         )
 
       return createNavigationState({
@@ -129,7 +133,11 @@ function App() {
   const [
     isFirstRunTutorialOpen,
     setIsFirstRunTutorialOpen,
-  ] = useState(!doNotShowAgain)
+  ] = useState(
+    !doNotShowAgain &&
+      currentPage !== 'privacy' &&
+      currentPage !== 'terms',
+  )
   const firstRunTutorialOpenRef = useRef(
     isFirstRunTutorialOpen,
   )
@@ -143,6 +151,8 @@ function App() {
   ] = useState(
     () =>
       doNotShowAgain &&
+      currentPage !== 'privacy' &&
+      currentPage !== 'terms' &&
       shouldShowMealPlanWelcome(),
   )
   const mealPlanWelcomeOpenRef = useRef(
@@ -171,6 +181,8 @@ function App() {
     isPwaExitGuardState(window.history.state),
   )
   const [isBackExitToastVisible, setIsBackExitToastVisible] =
+    useState(false)
+  const [openAiRecommendation, setOpenAiRecommendation] =
     useState(false)
   const pageContainerRef =
     useRef<HTMLDivElement>(null)
@@ -299,6 +311,7 @@ function App() {
       const nextNavigation = readNavigationState(
         event.state,
         window.location.search,
+        window.location.pathname,
       )
       const currentNavigation =
         navigationRef.current
@@ -590,6 +603,7 @@ function App() {
   }
 
   function navigateToPage(page: PageName) {
+    setOpenAiRecommendation(false)
     commitNavigation({
       page,
       recipeId: null,
@@ -601,6 +615,7 @@ function App() {
   }
 
   function navigateToTopLevelPage(page: PageName) {
+    setOpenAiRecommendation(false)
     if (isTopLevelHistoryTravelingRef.current) {
       return
     }
@@ -804,6 +819,18 @@ function App() {
     })
   }
 
+  function startAiRecommendation() {
+    setOpenAiRecommendation(true)
+    commitNavigation({
+      page: 'mealPlan',
+      recipeId: null,
+      plannerRecipeName: null,
+      openAiTrial: false,
+      showInventoryRecommendations: false,
+      overlay: null,
+    })
+  }
+
   function replayTutorial() {
     tutorialReplayRef.current = true
     commitNavigation({
@@ -831,6 +858,25 @@ function App() {
   }
 
   function closeFeedback() {
+    if (navigationRef.current.index > 0) {
+      window.history.back()
+      return
+    }
+
+    commitNavigation(
+      {
+        page: 'settings',
+        recipeId: null,
+        plannerRecipeName: null,
+        openAiTrial: false,
+        showInventoryRecommendations: false,
+        overlay: null,
+      },
+      'replace',
+    )
+  }
+
+  function closeLegalPage() {
     if (navigationRef.current.index > 0) {
       window.history.back()
       return
@@ -941,6 +987,10 @@ function App() {
               consumePlannerRecipeContext
             }
             openAiTrial={openAiTrial}
+            openAiRecommendation={openAiRecommendation}
+            onAiRecommendationStarted={() =>
+              setOpenAiRecommendation(false)
+            }
           />
         )
 
@@ -982,6 +1032,12 @@ function App() {
             onOpenFeedback={() =>
               navigateToPage('feedback')
             }
+            onOpenPrivacy={() =>
+              navigateToPage('privacy')
+            }
+            onOpenTerms={() =>
+              navigateToPage('terms')
+            }
             onReplayTutorial={replayTutorial}
           />
         )
@@ -1001,6 +1057,21 @@ function App() {
           <FeedbackPage onBack={closeFeedback} />
         )
 
+      case 'privacy':
+        return (
+          <PrivacyPage onBack={closeLegalPage} />
+        )
+
+      case 'terms':
+        return <TermsPage onBack={closeLegalPage} />
+
+      case 'admin':
+        return (
+          <AdminDashboardPage
+            onBack={() => navigateToPage('settings')}
+          />
+        )
+
       case 'today':
       default:
         return (
@@ -1008,6 +1079,9 @@ function App() {
             onChangePage={navigateToPage}
             onOpenRecipeDetail={openRecipeDetail}
             onPlanRecipe={openPlannerWithRecipe}
+            onStartAiRecommendation={
+              startAiRecommendation
+            }
           />
         )
     }
@@ -1022,13 +1096,19 @@ function App() {
     settings: '더보기',
     guide: '오늘식탁 사용 가이드',
     feedback: '의견 보내기',
+    privacy: '개인정보처리방침',
+    terms: '이용약관',
+    admin: '운영 대시보드',
   }
   const isUtilityPage =
     currentPage === 'shopping' ||
     currentPage === 'inventory' ||
     currentPage === 'settings' ||
     currentPage === 'guide' ||
-    currentPage === 'feedback'
+    currentPage === 'feedback' ||
+    currentPage === 'privacy' ||
+    currentPage === 'terms' ||
+    currentPage === 'admin'
   const appClassName = [
     'app',
     currentPage === 'today' ? 'app--home' : '',
@@ -1060,6 +1140,12 @@ function App() {
               ? 'settings'
               : currentPage === 'feedback'
                 ? 'settings'
+                : currentPage === 'privacy'
+                  ? 'settings'
+                  : currentPage === 'terms'
+                    ? 'settings'
+                : currentPage === 'admin'
+                  ? 'settings'
             : currentPage
         }
         onChangePage={navigateToTopLevelPage}

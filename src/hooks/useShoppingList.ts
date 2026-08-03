@@ -24,6 +24,7 @@ import {
 } from '../services/shoppingPurchaseEngine'
 import type { Ingredient } from '../types/ingredient'
 import type { ShoppingItem } from '../types/shopping'
+import { coalesceStoredShoppingIngredientAliases } from '../services/shoppingIngredientPolicy'
 import {
   readInventoryItems,
   writeInventoryItems,
@@ -54,12 +55,28 @@ function readItems(): ShoppingItem[] {
       return []
     }
 
-    return parsedValue.flatMap((item) => {
+    const normalizedItems = parsedValue.flatMap((item) => {
       const normalizedItem =
         normalizeStoredShoppingItem(item)
 
       return normalizedItem ? [normalizedItem] : []
     })
+    const coalescedItems =
+      coalesceStoredShoppingIngredientAliases(
+        normalizedItems,
+      )
+
+    if (
+      JSON.stringify(coalescedItems) !==
+      JSON.stringify(normalizedItems)
+    ) {
+      window.localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(coalescedItems),
+      )
+    }
+
+    return coalescedItems
   } catch {
     window.localStorage.removeItem(STORAGE_KEY)
     return []
@@ -84,9 +101,10 @@ function useShoppingList() {
   }, [])
 
   function saveItems(nextItems: ShoppingItem[]) {
-    const normalizedItems = nextItems.map(
-      normalizeShoppingItem,
-    )
+    const normalizedItems =
+      coalesceStoredShoppingIngredientAliases(
+        nextItems.map(normalizeShoppingItem),
+      )
 
     window.localStorage.setItem(
       STORAGE_KEY,
@@ -146,6 +164,7 @@ function useShoppingList() {
     )
 
     saveItems(replacement.items)
+    return replacement.generatedItems.length
   }
 
   function removeMealItems(

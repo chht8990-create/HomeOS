@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { findRecipeByMealName } from '../services/recipeEngine'
+import { ACCOUNT_SYNC_APPLIED_EVENT } from '../services/accountSyncScheduler'
 import type { MealType, StoredMeal } from '../types/meal'
 import useRecipes from './useRecipes'
 
@@ -80,6 +81,36 @@ function useMeal({ date, mealType }: UseMealOptions) {
         ? savedMeal.name
         : '',
   )
+
+  useEffect(() => {
+    function reloadSyncedMeal() {
+      const nextMeal = loadStoredMeal(
+        storageKey,
+        date,
+        mealType,
+      )
+
+      setSavedMeal(nextMeal)
+      setMealStatus(nextMeal?.status ?? 'empty')
+      setMealName(
+        nextMeal?.status === 'planned'
+          ? nextMeal.name
+          : '',
+      )
+    }
+
+    window.addEventListener(
+      ACCOUNT_SYNC_APPLIED_EVENT,
+      reloadSyncedMeal,
+    )
+
+    return () => {
+      window.removeEventListener(
+        ACCOUNT_SYNC_APPLIED_EVENT,
+        reloadSyncedMeal,
+      )
+    }
+  }, [date, mealType, storageKey])
 
   function startEditing() {
     setMealName(

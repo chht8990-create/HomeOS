@@ -1,6 +1,11 @@
 import type { Ingredient } from '../types/ingredient'
 import type { ShoppingItem } from '../types/shopping'
+import { mergeIngredients } from './ingredientMergeEngine'
 import { normalizeAiIngredientUnit } from './ingredientUnitEngine'
+import {
+  normalizeShoppingIngredientDisplayName,
+  normalizeShoppingIngredientMatchName,
+} from './shoppingIngredientPolicy'
 
 export type ShoppingSourceContext = {
   sourceKind?: 'meal_plan' | 'recipe'
@@ -51,12 +56,14 @@ export function createManualIngredientShoppingItems(
 ): ShoppingItem[] {
   const now = new Date().toISOString()
 
-  return ingredients.flatMap((ingredient) => {
+  return mergeIngredients(ingredients).flatMap((ingredient) => {
     const normalized =
       normalizeAiIngredientUnit({
         ...ingredient,
       })
-    const name = normalized.name.trim()
+    const name = normalizeShoppingIngredientDisplayName(
+      normalized.name,
+    )
     const unit = normalized.unit.trim()
 
     if (
@@ -94,10 +101,12 @@ export function createMealShoppingItems(
   const batchId =
     context.batchId ?? createShoppingBatchId()
 
-  return ingredients.map((ingredient) => ({
+  return mergeIngredients(ingredients).map((ingredient) => ({
     id: createShoppingItemId(),
     ...normalizeAiIngredientUnit({
-      name: ingredient.name,
+      name: normalizeShoppingIngredientDisplayName(
+        ingredient.name,
+      ),
       quantity: ingredient.quantity,
       unit: ingredient.unit,
     }),
@@ -138,7 +147,7 @@ export function createMealShoppingItems(
 function createShoppingIngredientKey(
   item: Pick<ShoppingItem, 'name' | 'unit'>,
 ) {
-  return `${item.name.trim().toLowerCase()}\u0000${item.unit?.trim() ?? ''}`
+  return `${normalizeShoppingIngredientMatchName(item.name)}\u0000${item.unit?.trim() ?? ''}`
 }
 
 export function replaceMealShoppingSourceItems(

@@ -45,6 +45,10 @@ export type Recipe = {
   id: string
   name: string
   ingredients: Ingredient[]
+  source?: 'ai'
+  fingerprint?: string
+  createdAt?: string
+  updatedAt?: string
   description?: string
   imageUrl?: string
   localImage?: string

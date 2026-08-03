@@ -38,6 +38,9 @@ const pageNames: PageName[] = [
   'settings',
   'guide',
   'feedback',
+  'privacy',
+  'terms',
+  'admin',
 ]
 
 const topLevelPageNames: PageName[] = [
@@ -108,6 +111,7 @@ export function isAppNavigationState(
 export function readNavigationState(
   historyState: unknown,
   search: string,
+  pathname = '/',
 ): AppNavigationState {
   if (isAppNavigationState(historyState)) {
     return createNavigationState(historyState)
@@ -115,9 +119,18 @@ export function readNavigationState(
 
   const params = new URLSearchParams(search)
   const pageParam = params.get('page')
-  const page = isPageName(pageParam)
-    ? pageParam
-    : 'today'
+  const normalizedPathname =
+    pathname.length > 1
+      ? pathname.replace(/\/+$/, '')
+      : pathname
+  const pathPage =
+    normalizedPathname === '/privacy'
+      ? 'privacy'
+      : normalizedPathname === '/terms'
+        ? 'terms'
+        : null
+  const page = pathPage ??
+    (isPageName(pageParam) ? pageParam : 'today')
 
   return createNavigationState({
     page,
@@ -144,13 +157,24 @@ export function createNavigationUrl(
 ) {
   const url = new URL(currentHref)
 
+  url.pathname =
+    state.page === 'privacy'
+      ? '/privacy'
+      : state.page === 'terms'
+        ? '/terms'
+        : '/'
+
   url.searchParams.delete('page')
   url.searchParams.delete('recipe')
   url.searchParams.delete('plannerRecipe')
   url.searchParams.delete('aiTrial')
   url.searchParams.delete('fromInventory')
 
-  if (state.page !== 'today') {
+  if (
+    state.page !== 'today' &&
+    state.page !== 'privacy' &&
+    state.page !== 'terms'
+  ) {
     url.searchParams.set('page', state.page)
   }
 

@@ -7,6 +7,7 @@ import type {
   AiGenerationUsage,
   AiMealPlanRecipeDetailRequest,
 } from '../../src/types/aiMealPlanTrial.js'
+import { runAiBusinessGuard } from '../../src/server/aiBusinessGuard.js'
 
 type AiServerEnvironment = {
   OPENAI_API_KEY?: string
@@ -662,9 +663,23 @@ export async function handleAiMealPlanRecipeDetail(
 
 export default {
   fetch(request: Request) {
-    return handleAiMealPlanRecipeDetail(
+    if (request.method !== 'POST') {
+      return handleAiMealPlanRecipeDetail(
+        request,
+        process.env,
+      )
+    }
+
+    return runAiBusinessGuard({
+      operation: 'recipe',
+      cacheTtlMs: 30 * 24 * 60 * 60 * 1_000,
+      environment: process.env,
       request,
-      process.env,
-    )
+      execute: (guardedRequest) =>
+        handleAiMealPlanRecipeDetail(
+          guardedRequest,
+          process.env,
+        ),
+    })
   },
 }
