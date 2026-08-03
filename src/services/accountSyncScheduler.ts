@@ -4,6 +4,7 @@ import {
   readAccountSyncMetadata,
   syncAccountStorage,
 } from './accountSyncClient'
+import { mirrorActiveAccountStorage } from './accountStorageNamespace'
 
 export const ACCOUNT_SYNC_DEBOUNCE_MS = 750
 export const ACCOUNT_SYNC_APPLIED_EVENT =
@@ -313,7 +314,7 @@ export function createAccountSyncScheduler(
 let isDispatchingRemoteSnapshot = false
 let browserSchedulerStarted = false
 
-function dispatchAppliedStorageEvents(
+export function dispatchAppliedStorageEvents(
   changedKeys: string[],
 ) {
   if (
@@ -379,6 +380,7 @@ export function startAccountSyncScheduler() {
 
   const handleMutation = () => {
     if (!isDispatchingRemoteSnapshot) {
+      mirrorActiveAccountStorage()
       browserAccountSyncScheduler.schedule()
     }
   }

@@ -6,9 +6,15 @@ import {
 } from './authEngine'
 import {
   cancelAccountSyncScheduler,
+  dispatchAppliedStorageEvents,
   flushAccountSyncScheduler,
   setAccountSyncIdentity,
 } from './accountSyncScheduler'
+import { restoreAccountStorageFromServer } from './accountSyncClient'
+import {
+  deactivateAccountStorage,
+  prepareAccountStorageForIdentity,
+} from './accountStorageNamespace'
 import type { AuthSession } from '../types/auth'
 
 let restorePromise: Promise<AuthSession> | null =
@@ -37,6 +43,12 @@ export async function restoreAuthSession(
 
       if (!response.ok) {
         cancelAccountSyncScheduler()
+        if (options.storage) {
+          const removedKeys = deactivateAccountStorage(
+            options.storage,
+          )
+          dispatchAppliedStorageEvents(removedKeys)
+        }
         return createAnonymousAuthSession()
       }
 
@@ -46,6 +58,10 @@ export async function restoreAuthSession(
 
       if (session.status === 'authenticated') {
         if (options.storage) {
+          prepareAccountStorageForIdentity(
+            options.storage,
+            session.user.id,
+          )
           setAccountSyncIdentity({
             storage: options.storage,
             userId: session.user.id,
@@ -61,13 +77,31 @@ export async function restoreAuthSession(
           options.storage
         ) {
           try {
+            const restoreResult =
+              await restoreAccountStorageFromServer({
+                storage: options.storage,
+                userId: session.user.id,
+                ...(options.fetcher
+                  ? { fetcher: options.fetcher }
+                  : {}),
+              })
             const syncResult =
               await flushAccountSyncScheduler({
                 force: true,
               })
+            const changedKeys = [
+              ...new Set([
+                ...restoreResult.changedKeys,
+                ...syncResult.changedKeys,
+              ]),
+            ]
+
+            if (restoreResult.changed) {
+              dispatchAppliedStorageEvents(changedKeys)
+            }
 
             if (
-              syncResult.changed &&
+              (restoreResult.changed || syncResult.changed) &&
               options.reloadOnSyncChange &&
               typeof window !== 'undefined'
             ) {
@@ -98,11 +132,23 @@ export async function restoreAuthSession(
         }
       } else {
         cancelAccountSyncScheduler()
+        if (options.storage) {
+          const removedKeys = deactivateAccountStorage(
+            options.storage,
+          )
+          dispatchAppliedStorageEvents(removedKeys)
+        }
       }
 
       return session
     } catch {
       cancelAccountSyncScheduler()
+      if (options.storage) {
+        const removedKeys = deactivateAccountStorage(
+          options.storage,
+        )
+        dispatchAppliedStorageEvents(removedKeys)
+      }
       return createAnonymousAuthSession()
     }
   })()
@@ -128,6 +174,10 @@ export function startGoogleLogin(
 
 export async function logoutAuthSession(
   fetcher: typeof fetch = fetch,
+  options: {
+    storage?: Storage
+    userId?: string
+  } = {},
 ) {
   cancelAccountSyncScheduler()
 
@@ -141,6 +191,14 @@ export async function logoutAuthSession(
 
   if (!response.ok) {
     throw new Error('LOGOUT_FAILED')
+  }
+
+  if (options.storage) {
+    const removedKeys = deactivateAccountStorage(
+      options.storage,
+      options.userId,
+    )
+    dispatchAppliedStorageEvents(removedKeys)
   }
 
   resetAuthSessionCache()

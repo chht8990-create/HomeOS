@@ -192,6 +192,7 @@ const householdUnitRules: HouseholdUnitRule[] = [
   {
     id: 'baechu-kimchi',
     matches: (name) =>
+      name === '김치' ||
       includesAny(name, ['배추김치', '묵은지']),
     gramsPerUnit: 2400,
     unit: '포기',

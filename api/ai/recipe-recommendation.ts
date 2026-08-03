@@ -3,6 +3,7 @@ import {
   AI_MAX_INVENTORY_ITEMS,
   AI_MAX_RECOMMENDATIONS,
   AI_MIN_ESTIMATED_MINUTES,
+  getAiInventoryQuantity,
   normalizeAiRecipeRecommendations,
   parseAiRecipeRecommendationOutput,
   validateAiRecipeRecommendationRequest,
@@ -720,14 +721,12 @@ function hasIngredient(
   quantity: number,
   unit: string,
 ) {
-  const normalizedName = name.trim().toLowerCase()
-
-  return inventoryItems.some(
-    (inventoryItem) =>
-      inventoryItem.name.trim().toLowerCase() ===
-        normalizedName &&
-      inventoryItem.unit === unit &&
-      inventoryItem.quantity >= quantity,
+  return (
+    getAiInventoryQuantity(
+      inventoryItems,
+      name,
+      unit,
+    ) >= quantity
   )
 }
 

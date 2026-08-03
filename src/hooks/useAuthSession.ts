@@ -47,6 +47,12 @@ function useAuthSession() {
     try {
       const session = await logoutAuthSession(
         fetch,
+        {
+          storage: window.localStorage,
+          ...(state.session.status === 'authenticated'
+            ? { userId: state.session.user.id }
+            : {}),
+        },
       )
       setState({
         phase: 'ready',

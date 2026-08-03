@@ -10,13 +10,9 @@ import {
   restoreAuthSession,
 } from './services/authClient'
 import { startAccountSyncScheduler } from './services/accountSyncScheduler'
+import { persistCurrentAccountStorage } from './services/accountStorageNamespace'
 
-initializeAiAccessUsage(window.localStorage)
 startAccountSyncScheduler()
-void restoreAuthSession({
-  storage: window.localStorage,
-  reloadOnSyncChange: true,
-})
 
 window.addEventListener('online', () => {
   resetAuthSessionCache()
@@ -26,11 +22,27 @@ window.addEventListener('online', () => {
   })
 })
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+async function bootstrap() {
+  const session = await restoreAuthSession({
+    storage: window.localStorage,
+    reloadOnSyncChange: true,
+  })
+  initializeAiAccessUsage(window.localStorage)
+  if (session.status === 'authenticated') {
+    persistCurrentAccountStorage(
+      window.localStorage,
+      session.user.id,
+    )
+  }
+
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  )
+}
+
+void bootstrap()
 
 if (
   import.meta.env.PROD &&

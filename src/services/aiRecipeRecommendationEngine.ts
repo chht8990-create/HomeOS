@@ -16,6 +16,7 @@ import {
   normalizeShoppingIngredientMatchName,
   normalizeShoppingIngredientPolicyName,
 } from './shoppingIngredientPolicy.js'
+import { createIngredientComparisonValue } from './ingredientUnitEngine.js'
 
 export const AI_MAX_INVENTORY_ITEMS = 40
 export const AI_MAX_RECOMMENDATIONS = 3
@@ -545,22 +546,33 @@ function normalizeName(value: string) {
   return normalizeInventoryIngredientName(value)
 }
 
-function getInventoryQuantity(
+export function getAiInventoryQuantity(
   inventoryItems: AiInventoryIngredient[],
   name: string,
   unit: string,
 ) {
-  const normalizedName = normalizeName(name)
+  const target = createIngredientComparisonValue({
+    name: normalizeName(name),
+    quantity: 1,
+    unit,
+  })
+  const availableBaseQuantity = inventoryItems.reduce(
+    (total, inventoryItem) => {
+      const available = createIngredientComparisonValue({
+        name: normalizeName(inventoryItem.name),
+        quantity: inventoryItem.quantity,
+        unit: inventoryItem.unit,
+      })
 
-  return inventoryItems.reduce(
-    (total, inventoryItem) =>
-      normalizeName(inventoryItem.name) ===
-        normalizedName &&
-      inventoryItem.unit.trim() === unit
-        ? total + inventoryItem.quantity
-        : total,
+      return available.key === target.key &&
+        available.baseUnit === target.baseUnit
+        ? total + available.amount
+        : total
+    },
     0,
   )
+
+  return availableBaseQuantity / target.sourceUnitFactor
 }
 
 export function normalizeAiRecipeRecommendations(
@@ -648,7 +660,7 @@ export function normalizeAiRecipeRecommendations(
         (ingredient): AiRecipeIngredient => ({
           ...ingredient,
           available:
-            getInventoryQuantity(
+            getAiInventoryQuantity(
               input.inventoryItems,
               ingredient.name,
               ingredient.unit,
@@ -673,7 +685,7 @@ export function normalizeAiRecipeRecommendations(
           }
 
           const availableQuantity =
-            getInventoryQuantity(
+            getAiInventoryQuantity(
               input.inventoryItems,
               ingredient.name,
               ingredient.unit,

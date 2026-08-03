@@ -6,6 +6,7 @@ import {
   mergeAccountSyncSnapshots,
   parseAccountSyncSnapshot,
 } from './accountSnapshotEngine'
+import { persistCurrentAccountStorage } from './accountStorageNamespace'
 import type {
   AccountSyncMetadata,
   AccountSyncResponse,
@@ -555,6 +556,103 @@ function parseSyncResponse(
   }
 }
 
+export async function restoreAccountStorageFromServer(
+  input: {
+    storage: SyncStorage
+    userId: string
+    fetcher?: typeof fetch
+    signal?: AbortSignal
+  },
+) {
+  const response = await (
+    input.fetcher ?? fetch
+  )('/api/account/sync', {
+    method: 'GET',
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json' },
+    ...(input.signal
+      ? { signal: input.signal }
+      : {}),
+  })
+
+  if (!response.ok) {
+    throw new Error(
+      response.status === 401
+        ? 'AUTH_REQUIRED'
+        : 'ACCOUNT_SYNC_RESTORE_FAILED',
+    )
+  }
+
+  const payload = (await response.json()) as unknown
+
+  if (
+    typeof payload !== 'object' ||
+    payload === null ||
+    Array.isArray(payload) ||
+    !('revision' in payload) ||
+    typeof payload.revision !== 'number' ||
+    !Number.isInteger(payload.revision) ||
+    payload.revision < 0 ||
+    !('snapshot' in payload)
+  ) {
+    throw new Error('ACCOUNT_SYNC_RESTORE_RESPONSE_INVALID')
+  }
+
+  const remoteSnapshot =
+    payload.snapshot === null
+      ? null
+      : parseAccountSyncSnapshot(payload.snapshot)
+
+  if (payload.snapshot !== null && !remoteSnapshot) {
+    throw new Error('ACCOUNT_SYNC_RESTORE_RESPONSE_INVALID')
+  }
+
+  if (!remoteSnapshot) {
+    return {
+      changed: false,
+      changedKeys: [] as string[],
+      revision: payload.revision,
+      hasRemoteSnapshot: false,
+    }
+  }
+
+  const localSnapshot = captureAccountSyncSnapshot(
+    input.storage,
+    new Date().toISOString(),
+    input.userId,
+  )
+  const restoredSnapshot = mergeAccountSyncSnapshots(
+    localSnapshot,
+    remoteSnapshot,
+  )
+  const changedKeys = restoredSnapshot.entries
+    .filter((entry) => {
+      const current = input.storage.getItem(entry.key)
+
+      return entry.deletedAt
+        ? current !== null
+        : entry.value !== null &&
+            current !== materializeSnapshotValue(entry.value)
+    })
+    .map((entry) => entry.key)
+  const changed = applyAccountSyncSnapshot(
+    input.storage,
+    restoredSnapshot,
+  )
+
+  persistCurrentAccountStorage(
+    input.storage,
+    input.userId,
+  )
+
+  return {
+    changed,
+    changedKeys,
+    revision: payload.revision,
+    hasRemoteSnapshot: true,
+  }
+}
+
 export async function syncAccountStorage(
   input: {
     storage: SyncStorage
@@ -686,6 +784,10 @@ export async function syncAccountStorage(
   input.storage.setItem(
     ACCOUNT_SYNC_METADATA_STORAGE_KEY,
     JSON.stringify(nextMetadata),
+  )
+  persistCurrentAccountStorage(
+    input.storage,
+    input.userId,
   )
 
   return {

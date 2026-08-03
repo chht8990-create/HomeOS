@@ -393,6 +393,7 @@ try {
     )
   const {
     AI_MAX_INVENTORY_ITEMS,
+    getAiInventoryQuantity,
     normalizeAiRecipeRecommendations,
     parseAiRecipeRecommendationOutput,
     validateAiRecipeRecommendationRequest,
@@ -730,6 +731,7 @@ try {
   const {
     applyAccountSyncSnapshot,
     captureAccountSyncSnapshot,
+    restoreAccountStorageFromServer,
     syncAccountStorage,
   } = await vite.ssrLoadModule(
     '/src/services/accountSyncClient.ts',
@@ -753,6 +755,14 @@ try {
     restoreAuthSession,
   } = await vite.ssrLoadModule(
     '/src/services/authClient.ts',
+  )
+  const {
+    deactivateAccountStorage,
+    getAccountStorageNamespaceState,
+    persistCurrentAccountStorage,
+    prepareAccountStorageForIdentity,
+  } = await vite.ssrLoadModule(
+    '/src/services/accountStorageNamespace.ts',
   )
 
   const createAccountSyncTestStorage = (
@@ -4516,6 +4526,134 @@ try {
         ],
       )
       assert.equal(JSON.stringify(recommendations), original)
+    },
+  )
+
+  await check(
+    'R1.2 AI units: 김치 포기와 두부 모를 g 기준으로 환산해 보유·부족을 동일 판정',
+    () => {
+      const ingredientNames = ['배추김치', '두부']
+      const recommendation = {
+        title: '두부 김치찌개',
+        summary: '김치와 두부를 활용한 찌개',
+        servings: 2,
+        estimatedMinutes: 30,
+        ingredients: [
+          {
+            name: '배추김치',
+            quantity: 300,
+            unit: 'g',
+            available: false,
+            group: 'main',
+            note: null,
+            optional: false,
+            substitute: [],
+          },
+          {
+            name: '두부',
+            quantity: 300,
+            unit: 'g',
+            available: false,
+            group: 'main',
+            note: null,
+            optional: false,
+            substitute: [],
+          },
+        ],
+        missingIngredients: [],
+        ...createTestAiDetails(ingredientNames, 30),
+      }
+      const inventoryItems = [
+        { name: '김치', quantity: 0.5, unit: '포기' },
+        { name: '두부', quantity: 1, unit: '모' },
+      ]
+      const [normalized] = normalizeAiRecipeRecommendations(
+        [recommendation],
+        { inventoryItems, servings: 2 },
+      )
+      const recalculated =
+        recalculateAiRecommendationForInventory(
+          normalized,
+          inventoryItems,
+        )
+
+      assert.equal(
+        getAiInventoryQuantity(
+          inventoryItems,
+          '배추김치',
+          'g',
+        ),
+        1200,
+      )
+      assert.equal(
+        getAiInventoryQuantity(
+          [{ name: '묵은지', quantity: 0.25, unit: '포기' }],
+          '김치',
+          'g',
+        ),
+        600,
+      )
+      assert.equal(
+        getAiInventoryQuantity(
+          inventoryItems,
+          '두부',
+          'g',
+        ),
+        300,
+      )
+      assert.deepEqual(
+        normalized.ingredients.map(
+          (ingredient) => ingredient.available,
+        ),
+        [true, true],
+      )
+      assert.deepEqual(normalized.missingIngredients, [])
+      assert.deepEqual(recalculated.missingIngredients, [])
+    },
+  )
+
+  await check(
+    'R1.2 AI units: 여러 재고 합산과 환산 불가 단위의 안전한 exact fallback',
+    () => {
+      assert.equal(
+        getAiInventoryQuantity(
+          [
+            { name: '두부', quantity: 0.5, unit: '모' },
+            { name: '두부', quantity: 150, unit: 'g' },
+          ],
+          '두부',
+          'g',
+        ),
+        300,
+      )
+      assert.equal(
+        getAiInventoryQuantity(
+          [
+            {
+              name: '특수 재료',
+              quantity: 2,
+              unit: '묶음',
+            },
+          ],
+          '특수 재료',
+          '묶음',
+        ),
+        2,
+      )
+      assert.equal(
+        getAiInventoryQuantity(
+          [
+            {
+              name: '특수 재료',
+              quantity: 2,
+              unit: '묶음',
+            },
+          ],
+          '특수 재료',
+          'g',
+        ),
+        0,
+      )
     },
   )
 
@@ -8405,7 +8543,224 @@ try {
   )
 
   await check(
-    'Auth integration: 오프라인 세션 복원 실패에도 기존 LocalStorage를 유지',
+    'R1.2 Account isolation: 계정 A와 B의 활성 저장소를 같은 브라우저에서 분리',
+    () => {
+      const inventoryA = JSON.stringify([
+        {
+          id: 'inventory-a-onion',
+          name: '양파',
+          quantity: 0.5,
+          unit: '개',
+          updatedAt: '2026-08-03T10:00:00.000Z',
+        },
+      ])
+      const inventoryB = JSON.stringify([
+        {
+          id: 'inventory-b-potato',
+          name: '감자',
+          quantity: 1,
+          unit: '개',
+          updatedAt: '2026-08-03T10:01:00.000Z',
+        },
+      ])
+      const shoppingA =
+        '[{"id":"shopping-a","name":"대파","updatedAt":"2026-08-03T10:00:00.000Z"}]'
+      const mealPlanA =
+        '[{"id":"meal-a","date":"2026-08-04","type":"dinner","updatedAt":"2026-08-03T10:00:00.000Z"}]'
+      const { storage } = createAccountSyncTestStorage([
+        ['homeos.inventory', inventoryA],
+        ['homeos.shopping.items', shoppingA],
+        ['homeos.mealPlan.items', mealPlanA],
+        [
+          ACCOUNT_SYNC_METADATA_STORAGE_KEY,
+          JSON.stringify({ userId: 'user-a' }),
+        ],
+      ])
+
+      const preparedA = prepareAccountStorageForIdentity(
+        storage,
+        'user-a',
+      )
+      assert.equal(preparedA.migratedLegacy, true)
+      assert.equal(storage.getItem('homeos.inventory'), inventoryA)
+
+      const removedA = deactivateAccountStorage(
+        storage,
+        'user-a',
+      )
+      assert.ok(removedA.includes('homeos.inventory'))
+      assert.equal(storage.getItem('homeos.inventory'), null)
+
+      const preparedB = prepareAccountStorageForIdentity(
+        storage,
+        'user-b',
+      )
+      assert.equal(preparedB.hasNamespace, false)
+      assert.equal(storage.getItem('homeos.inventory'), null)
+      assert.equal(storage.getItem('homeos.shopping.items'), null)
+      assert.equal(storage.getItem('homeos.mealPlan.items'), null)
+      storage.setItem('homeos.inventory', inventoryB)
+      assert.equal(
+        persistCurrentAccountStorage(storage, 'user-b'),
+        true,
+      )
+
+      deactivateAccountStorage(storage, 'user-b')
+      prepareAccountStorageForIdentity(storage, 'user-a')
+      assert.equal(storage.getItem('homeos.inventory'), inventoryA)
+      assert.equal(storage.getItem('homeos.shopping.items'), shoppingA)
+      assert.equal(storage.getItem('homeos.mealPlan.items'), mealPlanA)
+      assert.notEqual(storage.getItem('homeos.inventory'), inventoryB)
+      deactivateAccountStorage(storage, 'user-a')
+    },
+  )
+
+  await check(
+    'R1.2 Account isolation: 소유자가 다르거나 없는 legacy 데이터는 신규 계정에 자동 업로드하지 않음',
+    () => {
+      const legacyInventory =
+        '[{"id":"legacy-kimchi","name":"김치"}]'
+      const mismatch = createAccountSyncTestStorage([
+        ['homeos.inventory', legacyInventory],
+        [
+          ACCOUNT_SYNC_METADATA_STORAGE_KEY,
+          JSON.stringify({ userId: 'user-a' }),
+        ],
+      ])
+
+      const preparedB = prepareAccountStorageForIdentity(
+        mismatch.storage,
+        'user-b',
+      )
+      assert.equal(preparedB.quarantinedLegacy, true)
+      assert.equal(
+        mismatch.storage.getItem('homeos.inventory'),
+        null,
+      )
+      assert.equal(
+        getAccountStorageNamespaceState(
+          mismatch.storage,
+          'user-b',
+        ).namespaceKeys.length,
+        0,
+      )
+
+      deactivateAccountStorage(mismatch.storage, 'user-b')
+      const restoredA = prepareAccountStorageForIdentity(
+        mismatch.storage,
+        'user-a',
+      )
+      assert.equal(restoredA.migratedLegacy, true)
+      assert.equal(
+        mismatch.storage.getItem('homeos.inventory'),
+        legacyInventory,
+      )
+      deactivateAccountStorage(mismatch.storage, 'user-a')
+      const restoredAAgain = prepareAccountStorageForIdentity(
+        mismatch.storage,
+        'user-a',
+      )
+      assert.equal(restoredAAgain.migratedLegacy, false)
+      deactivateAccountStorage(mismatch.storage, 'user-a')
+
+      const unowned = createAccountSyncTestStorage([
+        ['homeos.inventory', legacyInventory],
+      ])
+      prepareAccountStorageForIdentity(
+        unowned.storage,
+        'user-b',
+      )
+      assert.equal(
+        unowned.storage.getItem('homeos.inventory'),
+        null,
+      )
+      assert.ok(
+        getAccountStorageNamespaceState(
+          unowned.storage,
+          'user-b',
+        ).quarantineKeys.length > 0,
+      )
+      deactivateAccountStorage(unowned.storage, 'user-b')
+    },
+  )
+
+  await check(
+    'R1.2 Account isolation: 로그인 복원은 서버 snapshot GET을 먼저 적용',
+    async () => {
+      const { storage } = createAccountSyncTestStorage()
+      const remoteInventory = JSON.stringify([
+        {
+          id: 'remote-tofu',
+          name: '두부',
+          quantity: 1,
+          unit: '모',
+          updatedAt: '2026-08-03T10:05:00.000Z',
+        },
+      ])
+      const methods = []
+
+      prepareAccountStorageForIdentity(storage, 'user-server')
+      const result = await restoreAccountStorageFromServer({
+        storage,
+        userId: 'user-server',
+        fetcher: async (_url, init) => {
+          methods.push(init.method)
+          return new Response(
+            JSON.stringify({
+              revision: 4,
+              snapshot: {
+                formatVersion: '1.0',
+                capturedAt: '2026-08-03T10:05:00.000Z',
+                entries: [
+                  {
+                    key: 'homeos.inventory',
+                    value: remoteInventory,
+                    updatedAt: '2026-08-03T10:05:00.000Z',
+                    deletedAt: null,
+                  },
+                ],
+              },
+            }),
+            {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          )
+        },
+      })
+
+      assert.deepEqual(methods, ['GET'])
+      assert.equal(result.hasRemoteSnapshot, true)
+      assert.equal(storage.getItem('homeos.inventory'), remoteInventory)
+      deactivateAccountStorage(storage, 'user-server')
+    },
+  )
+
+  await check(
+    'R1.2 Account isolation: 인증 복원이 끝나기 전에는 React 화면을 렌더링하지 않음',
+    () => {
+      const mainSource = readFileSync(
+        'src/main.tsx',
+        'utf8',
+      )
+      const restoreIndex = mainSource.indexOf(
+        'await restoreAuthSession',
+      )
+      const renderIndex = mainSource.indexOf(
+        'createRoot(',
+      )
+
+      assert.ok(restoreIndex >= 0)
+      assert.ok(renderIndex > restoreIndex)
+      assert.match(
+        mainSource,
+        /persistCurrentAccountStorage\([\s\S]*session\.user\.id/,
+      )
+    },
+  )
+
+  await check(
+    'Auth integration: 오프라인 세션 복원 실패 시 계정 데이터는 격리 보존하고 활성 UI에서는 제거',
     async () => {
       const values = new Map([
         ['homeos.inventory', '[{"id":"onion"}]'],
@@ -8437,9 +8792,14 @@ try {
       })
 
       assert.equal(session.status, 'anonymous')
-      assert.equal(
-        values.get('homeos.inventory'),
-        '[{"id":"onion"}]',
+      assert.equal(values.get('homeos.inventory'), undefined)
+      assert.ok(
+        [...values.entries()].some(
+          ([key, value]) =>
+            key.startsWith(
+              'today-table.account-storage-quarantine.v1.',
+            ) && value === '[{"id":"onion"}]',
+        ),
       )
     },
   )
