@@ -7,8 +7,8 @@
 - Production origin: `https://home-os-one.vercel.app`
 - Web Manifest: `https://home-os-one.vercel.app/manifest.webmanifest`
 - applicationId: `com.todaytable.app`
-- versionName: `1.0.0`
-- versionCode: `1`
+- versionName: `1.0.2`
+- versionCode: `2`
 - display: `standalone`
 - minSdk: `23`
 - targetSdk: `36`

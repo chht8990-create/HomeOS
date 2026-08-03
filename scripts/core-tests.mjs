@@ -202,8 +202,8 @@ try {
       assert.equal(webManifest.display, 'standalone')
       assert.equal(twaManifest.packageId, 'com.todaytable.app')
       assert.equal(twaManifest.host, 'home-os-one.vercel.app')
-      assert.equal(twaManifest.appVersion, '1.0.0')
-      assert.equal(twaManifest.appVersionCode, 1)
+      assert.equal(twaManifest.appVersion, '1.0.2')
+      assert.equal(twaManifest.appVersionCode, 2)
       assert.equal(twaManifest.minSdkVersion, 23)
       assert.equal(
         twaManifest.features.playBilling.enabled,
